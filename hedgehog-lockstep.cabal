@@ -1,0 +1,66 @@
+cabal-version:   3.0
+name:            hedgehog-lockstep
+version:         0.1.0.0
+synopsis:        Lockstep-style stateful property testing for Hedgehog
+description:
+  Lockstep-style testing of stateful APIs built on Hedgehog's
+  state machine framework. Port of quickcheck-lockstep concepts
+  with integrated shrinking, parallel testing, and less boilerplate.
+license:         BSD-3-Clause
+license-file:    LICENSE
+build-type:      Simple
+
+common warnings
+  ghc-options: -Wall -Wcompat -Werror -Wno-unticked-promoted-constructors -funbox-strict-fields
+
+library
+  import:           warnings
+  hs-source-dirs:   src
+  default-language: GHC2021
+  default-extensions:
+    DerivingStrategies
+    GADTs
+    LambdaCase
+    OverloadedStrings
+    RecordWildCards
+    StrictData
+
+  exposed-modules:
+    Hedgehog.Lockstep
+    Hedgehog.Lockstep.Command
+    Hedgehog.Lockstep.GVar
+    Hedgehog.Lockstep.Op
+    Hedgehog.Lockstep.Property
+    Hedgehog.Lockstep.State
+
+  build-depends:
+    , barbies    >=2.0     && <2.2
+    , base       >=4.20    && <4.22
+    , containers >=0.6     && <0.9
+    , hedgehog   >=1.4     && <1.6
+
+test-suite hedgehog-lockstep-test
+  import:           warnings
+  type:             exitcode-stdio-1.0
+  hs-source-dirs:   test
+  main-is:          Main.hs
+  default-language: GHC2021
+  default-extensions:
+    DerivingStrategies
+    GADTs
+    LambdaCase
+    OverloadedStrings
+    RecordWildCards
+    StrictData
+
+  other-modules:
+    Test.BuggyCounter
+    Test.HandleStore
+    Test.KVStore
+
+  build-depends:
+    , base              >=4.20 && <4.22
+    , barbies           >=2.0  && <2.2
+    , containers        >=0.6  && <0.9
+    , hedgehog          >=1.4  && <1.6
+    , hedgehog-lockstep
