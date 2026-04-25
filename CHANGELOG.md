@@ -34,6 +34,14 @@ Initial release.
   separately, without hardcoding `PropertyT IO` into every `lsCmdExec`.
 - `hoistLockstepCmd :: (forall a. m a -> n a) -> LockstepCmd m model -> LockstepCmd n model`
   for retargeting a command's monad.
+- New module `Hedgehog.Lockstep.Observe` exposing an `Observation`
+  GADT (`ObserveEq`, `ObserveProject`, `ObservePair`, `ObserveCustom`)
+  and `runObservation`. The GADT factors out the common
+  model-output-versus-real-output comparison patterns into a typed DSL
+  so users can write `lsCmdObserve = runObservation ObserveEq` or
+  `lsCmdObserve = runObservation (ObserveProject normM normR)` instead
+  of writing the assertion by hand. This is the hedgehog-lockstep
+  analogue of `quickcheck-lockstep`'s `Observable`/`ModelValue` split.
 - `lockstepCommands` for users who want to drive
   `Gen.sequential` / `executeSequential` directly.
 - README guidance and a `Test.KVStore` example for using

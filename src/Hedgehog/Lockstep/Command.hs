@@ -85,6 +85,19 @@ data LockstepCmd m model = forall input output modelOutput.
 
     -- | Compare model output with real output.
     -- Use Hedgehog assertions ('Hedgehog.===' etc.) to report mismatches.
+    --
+    -- For structured comparison patterns (equality, projection,
+    -- pairwise), 'Hedgehog.Lockstep.Observe.runObservation' produces
+    -- a function of exactly this type from a typed
+    -- 'Hedgehog.Lockstep.Observe.Observation' value, so you can write
+    --
+    -- > lsCmdObserve = runObservation ObserveEq
+    --
+    -- or
+    --
+    -- > lsCmdObserve = runObservation (ObserveProject normModel normReal)
+    --
+    -- instead of writing the assertion by hand.
   , lsCmdObserve :: modelOutput -> output -> Test ()
 
     -- | Additional invariants to check after each command, separate from

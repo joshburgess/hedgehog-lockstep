@@ -45,6 +45,10 @@ module Hedgehog.Lockstep
   , applyOp
   , (>>>)
 
+    -- * Structured observations
+  , Observation (..)
+  , runObservation
+
     -- * Running tests
   , lockstepProperty
   , lockstepPropertyWith
@@ -78,6 +82,7 @@ import Hedgehog.Internal.State (Var (..), Symbolic, Concrete)
 
 import Hedgehog.Lockstep.Op
 import Hedgehog.Lockstep.GVar
+import Hedgehog.Lockstep.Observe
 import Hedgehog.Lockstep.State
 import Hedgehog.Lockstep.Command
 import Hedgehog.Lockstep.Property

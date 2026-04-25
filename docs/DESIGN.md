@@ -356,13 +356,23 @@ feature needs real-world use to guide its shape.
 ### 5.1 `ModelResult` type family and `Observe` class
 
 The earlier draft proposed a type family `ModelResult state a` and a class
-`Observe state a` to automate the model-to-real comparison. The shipped API
-instead uses a per-command `lsCmdObserve` written in direct Hedgehog
-assertion style. In practice the per-command observer is only a few lines
-and side-steps the orphan-instance and coverage-of-types issues that a class
-based design runs into. A typeclass-based variant is still a reasonable
-future direction once there's enough real-world usage to see which comparison
-patterns recur.
+`Observe state a` to automate the model-to-real comparison. The shipped
+API does not have a class. Instead, two layers cover the same ground:
+
+* `lsCmdObserve :: modelOutput -> output -> Test ()` is the per-command
+  comparison hook. It is the universal escape hatch.
+* `Observation modelOutput output` is a typed DSL that captures the
+  common patterns (`ObserveEq`, `ObserveProject`, `ObservePair`,
+  `ObserveCustom`); `runObservation` turns one into the function
+  `lsCmdObserve` expects. This is the hedgehog-lockstep analogue of
+  `quickcheck-lockstep`'s `Observable`/`ModelValue` split, expressed as
+  data instead of a class so it composes per-command without
+  orphan-instance hazards.
+
+A class-based design (with associated types pinning the model side to
+the real side) is still a possible future direction once there's enough
+real-world usage to see which comparison patterns recur often enough to
+justify giving up the per-command flexibility.
 
 ### 5.2 Automatic `usedVars` via `HTraversable`
 
@@ -420,7 +430,7 @@ peer would be interesting future work.
 |--------|-------------------|-------------------|
 | **Shrinking** | Manual (`shrinkWithVars`) | Integrated (free) |
 | **Variables** | `GVar` with `Op` DSL | `GVar` adapted for `Symbolic`/`Concrete` |
-| **Model / real divergence** | `ModelValue`/`Observable` GADTs plus `observeModel`/`observeReal` | `modelOutput` existential plus per-command `lsCmdObserve` |
+| **Model / real divergence** | `ModelValue`/`Observable` GADTs plus `observeModel`/`observeReal` | `modelOutput` existential plus per-command `lsCmdObserve`, with `Observation` GADT (`ObserveEq`/`ObserveProject`/`ObservePair`/`ObserveCustom`) for structured cases |
 | **Variable tracking** | Manual `usedVars` | Automatic via `TraversableB` |
 | **Parallel testing** | Not supported | Supported via `executeParallel` |
 | **Tagging** | `tagStep` + `tagActions` re-runs model | `lsCmdTag` + Hedgehog `label`; ad-hoc `classify` / `label` in observer also supported |

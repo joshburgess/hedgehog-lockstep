@@ -126,6 +126,46 @@ gv     :: GVar (Either err (Handle, Name)) v
 gvHandle = mapGVar (OpRight >>> OpFst) gv  -- :: GVar Handle v
 ```
 
+## Structured observations
+
+Plain `lsCmdObserve = \m r -> m === r` only works when the model output and the real output have the same type. Real APIs often violate that: a real `open` returns a `Handle` while the model returns an index; the real call returns a verbose error string while the model returns an abstract tag; both sides return rich records but only a subset of fields should be compared.
+
+`Observation modelOutput output` is a small typed DSL that captures the common patterns:
+
+```haskell
+data Observation modelOutput output where
+  ObserveEq      :: (Eq output, Show output) => Observation output output
+  ObserveProject :: (Eq obs, Show obs)
+                 => (modelOutput -> obs)
+                 -> (output -> obs)
+                 -> Observation modelOutput output
+  ObservePair    :: Observation m1 o1
+                 -> Observation m2 o2
+                 -> Observation (m1, m2) (o1, o2)
+  ObserveCustom  :: (modelOutput -> output -> Test ())
+                 -> Observation modelOutput output
+
+runObservation :: Observation modelOutput output -> modelOutput -> output -> Test ()
+```
+
+`runObservation` produces a function of exactly the shape `lsCmdObserve` expects, so:
+
+```haskell
+-- Same type on both sides:
+lsCmdObserve = runObservation ObserveEq
+
+-- Project both sides through a normaliser:
+lsCmdObserve = runObservation (ObserveProject normaliseModel normaliseReal)
+
+-- Tuple of independent observations:
+lsCmdObserve = runObservation (ObservePair ObserveEq (ObserveProject id parseCount))
+
+-- Escape hatch (equivalent to writing it inline):
+lsCmdObserve = runObservation (ObserveCustom $ \m r -> ...)
+```
+
+This is the analogue of `quickcheck-lockstep`'s `Observable`/`ModelValue` GADT split, but lighter: you can mix structured observations with `lsCmdObserve = \m r -> ...` freely, file by file. See `test/Test/Observation.hs` for an example using `ObservePair` + `ObserveProject`.
+
 ## LockstepCmd fields
 
 | Field | Type | Purpose |

@@ -4,6 +4,7 @@ import System.Exit (exitFailure, exitSuccess)
 import Test.KVStore (prop_kvSequential)
 import Test.HandleStore (prop_handleSequential)
 import Test.BuggyCounter (prop_buggyCounterDetected)
+import Test.Observation (prop_observation)
 import Test.OpProjections (prop_opProjections)
 import Test.ParallelKV (prop_kvParallel)
 import Test.PureSort (prop_pureSort)
@@ -23,13 +24,14 @@ main = do
   ok8 <- check prop_mkGVarId
   ok9 <- check prop_mapGVar
   ok10 <- check prop_readerKV
+  ok11 <- check prop_observation
   -- BuggyCounter should FAIL (model is deliberately wrong).
   -- We verify the failure is detected.
-  ok11 <- check prop_buggyCounterDetected
-  let bugDetected = not ok11
+  ok12 <- check prop_buggyCounterDetected
+  let bugDetected = not ok12
   putStrLn $ if bugDetected
     then "  Buggy model correctly detected"
     else "  Buggy model was NOT detected (bug in lockstep!)"
-  if and [ok1, ok2, ok3, ok4, ok5, ok6, ok7, ok8, ok9, ok10, bugDetected]
+  if and [ok1, ok2, ok3, ok4, ok5, ok6, ok7, ok8, ok9, ok10, ok11, bugDetected]
     then exitSuccess
     else exitFailure

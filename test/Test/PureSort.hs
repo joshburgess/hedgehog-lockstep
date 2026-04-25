@@ -49,7 +49,7 @@ cmdSort = LockstepCmd
 
   , lsCmdRequire = \_ _ -> True
 
-  , lsCmdObserve = \expected actual -> expected === actual
+  , lsCmdObserve = runObservation ObserveEq
 
   -- System invariant: a sorted list is monotonically non-decreasing.
   , lsCmdInvariants = \_ xs ->

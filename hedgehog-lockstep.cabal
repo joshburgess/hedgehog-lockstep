@@ -62,6 +62,7 @@ library
     Hedgehog.Lockstep
     Hedgehog.Lockstep.Command
     Hedgehog.Lockstep.GVar
+    Hedgehog.Lockstep.Observe
     Hedgehog.Lockstep.Op
     Hedgehog.Lockstep.Property
     Hedgehog.Lockstep.State
@@ -90,6 +91,7 @@ test-suite hedgehog-lockstep-test
     Test.BuggyCounter
     Test.HandleStore
     Test.KVStore
+    Test.Observation
     Test.OpProjections
     Test.ParallelKV
     Test.PureSort
