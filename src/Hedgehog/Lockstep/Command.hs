@@ -1,5 +1,6 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE QuantifiedConstraints #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 -- | The t'LockstepCmd' record bundling a single API operation with its
 -- model interpretation, observation, and post-state invariants.
 --
@@ -12,8 +13,9 @@ module Hedgehog.Lockstep.Command
   , toLockstepCommand
   ) where
 
-import Data.Dynamic (fromDynamic)
-import Data.Typeable (Typeable)
+import Data.Dynamic (dynTypeRep, fromDynamic)
+import Data.Proxy (Proxy (..))
+import Data.Typeable (TypeRep, Typeable, typeRep)
 import Data.Functor.Barbie (TraversableB)
 import Data.Functor.Classes (Ord1)
 import Hedgehog (Gen, Test, footnote, failure)
@@ -125,9 +127,26 @@ toLockstepCommand (LockstepCmd{..}) = Command gen exec callbacks
                   lsCmdObserve modelOut output
                   lsCmdInvariants (lsModel newSt) output
                 Nothing -> do
-                  footnote "hedgehog-lockstep internal error: model result type mismatch"
+                  footnote $ unlines
+                    [ "hedgehog-lockstep internal error: model result type mismatch."
+                    , "  stored Dynamic type: " <> show (dynTypeRep dyn)
+                    , "  expected:            " <> show (expectedModelType lsCmdObserve)
+                    , "This indicates the Update and Ensure callbacks for one"
+                    , "command saw inconsistent types, which should be impossible."
+                    ]
                   failure
             Nothing -> do
-              footnote "hedgehog-lockstep internal error: no model entries"
+              -- Unreachable: Hedgehog runs Update before Ensure for the
+              -- same command, and Update always sets 'lsLastEntry' via
+              -- 'insertModelResult'.
+              footnote "hedgehog-lockstep internal error: Ensure ran without a preceding Update"
               failure
       ]
+
+-- | Recover the model-output 'TypeRep' from a 'lsCmdObserve' function,
+-- so that internal-error messages can name the type the 'Ensure' callback
+-- expected to find in the stored 'Data.Dynamic.Dynamic'.
+expectedModelType
+  :: forall modelOutput output. Typeable modelOutput
+  => (modelOutput -> output -> Test ()) -> TypeRep
+expectedModelType _ = typeRep (Proxy @modelOutput)

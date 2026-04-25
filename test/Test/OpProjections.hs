@@ -114,7 +114,7 @@ pickDoubled st = do
   let vars = varsOfType @MakeOutput st
   var <- Gen.element vars
   let op :: Op MakeOutput Int
-      op = OpRight Hedgehog.Lockstep.>>> OpSnd
+      op = OpRight >>> OpSnd
   pure (mkGVar var op)
 
 cmdReadDoubled :: LockstepCmd (PropertyT IO) Model

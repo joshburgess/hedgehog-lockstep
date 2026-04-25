@@ -159,7 +159,7 @@ pickHandle st = do
   let vars = varsOfType @OpenResult st
   var <- Gen.element vars
   let op :: Op OpenResult Handle
-      op = OpRight Hedgehog.Lockstep.>>> OpFst
+      op = OpRight >>> OpFst
   pure $ mkGVar var op
 
 resolveHandle :: Ord1 v => GVar Handle v -> LockstepState Model v -> Maybe Handle

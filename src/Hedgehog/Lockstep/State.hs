@@ -6,6 +6,12 @@
 --
 -- The model environment is what makes t'Hedgehog.Lockstep.GVar.GVar'
 -- resolution work across the symbolic and concrete phases.
+--
+-- The @LockstepState@ constructor and the @ls*@ field selectors are
+-- exported from this module for library internals to use; the top-level
+-- 'Hedgehog.Lockstep' facade re-exports only the type and projection
+-- accessors. Treat the constructor and field selectors as internal:
+-- subject to change without a major version bump.
 module Hedgehog.Lockstep.State
   ( LockstepState (..)
   , ModelEnv

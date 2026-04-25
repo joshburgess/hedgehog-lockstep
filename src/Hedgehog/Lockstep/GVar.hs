@@ -55,7 +55,7 @@ instance Show (GVar a v) where
 -- @modelX@ is the model-side output type stored in the environment.
 -- The 'Op' projects from @modelX@ to the desired type @a@.
 mkGVar
-  :: (Typeable modelX, Typeable a, Typeable realX, Ord realX)
+  :: (Typeable modelX, Typeable realX, Ord realX)
   => Var realX v -> Op modelX a -> GVar a v
 mkGVar var op =
   GVar var (showOp op) $ \dyn ->
