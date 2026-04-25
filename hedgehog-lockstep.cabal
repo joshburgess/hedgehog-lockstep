@@ -61,6 +61,7 @@ library
   exposed-modules:
     Hedgehog.Lockstep
     Hedgehog.Lockstep.Command
+    Hedgehog.Lockstep.Examples
     Hedgehog.Lockstep.GVar
     Hedgehog.Lockstep.Observe
     Hedgehog.Lockstep.Op
@@ -91,6 +92,7 @@ test-suite hedgehog-lockstep-test
     Test.BuggyCounter
     Test.HandleStore
     Test.KVStore
+    Test.LabelledExamples
     Test.Observation
     Test.OpProjections
     Test.ParallelKV

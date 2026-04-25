@@ -384,19 +384,22 @@ is really a property of the design rather than additional code.
 
 ### 5.3 Tagging and labelled examples
 
-The library ships `lsCmdTag :: model -> model -> modelOutput -> [String]`,
-the analogue of `quickcheck-lockstep`'s `tagStep`. It runs in the `Ensure`
-callback, sees the pre- and post-step model and the model's predicted output,
-and feeds each returned tag to `Hedgehog.label` so per-tag distribution shows
-up in the test summary. `Hedgehog.classify` and `Hedgehog.label` calls inside
-`lsCmdObserve` are still supported for ad-hoc tagging that depends on the
-real output.
+The library ships three layers of coverage support:
 
-What is *not* yet shipped is a `lockstepLabelledExamples` workflow: the
-QC-lockstep `tagActions` re-runs the model only (no real execution) to collect
-labels for `labelledExamples`. Hedgehog has no `labelledExamples` primitive,
-so an equivalent would require deeper Hedgehog integration. Deferred to a
-later release.
+* `lsCmdTag :: model -> model -> modelOutput -> [String]`, the analogue of
+  `quickcheck-lockstep`'s `tagStep`. It runs in the `Ensure` callback, sees
+  the pre- and post-step model and the model's predicted output, and feeds
+  each returned tag to `Hedgehog.label` so per-tag distribution shows up in
+  the test summary.
+* `Hedgehog.classify` and `Hedgehog.label` calls inside `lsCmdObserve` for
+  ad-hoc tagging that depends on the real output.
+* `lockstepLabelledExamples`, the analogue of `QuickCheck`'s
+  `labelledExamples` and `quickcheck-lockstep`'s `tagActions`. It samples
+  random command sequences, runs only the model side, accumulates tags
+  from `lsCmdTag`, and prints one shortest trace per tag. Built directly
+  on top of Hedgehog's `Gen` rather than relying on a `labelledExamples`
+  primitive (Hedgehog has none): we just sample model traces ourselves
+  and aggregate.
 
 ### 5.4 Compositional commands
 

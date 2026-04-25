@@ -267,6 +267,39 @@ cmdGet store = LockstepCmd
 
 Hedgehog aggregates the labels across the run and prints a per-tag distribution table in the test summary. See `test/Test/KVStore.hs` for both styles.
 
+### Labelled examples (model-only)
+
+Hedgehog's distribution table tells you how often each tag fires across a real test run, but it doesn't show *what kind of trace* produced each tag. `lockstepLabelledExamples` does, by running the model side only (no IO) and printing one shortest sampled trace per tag:
+
+```haskell
+import Hedgehog.Lockstep
+
+main :: IO ()
+main = do
+  _ <- lockstepLabelledExamples
+         100         -- trials
+         12          -- max actions per trial
+         Map.empty   -- initial model
+         [cmdPut, cmdDelete]
+  pure ()
+```
+
+Sample output:
+
+```
+lockstepLabelledExamples: 4 tag(s) observed.
+Tag "Put new key" (1 action(s)):
+  PutInput "b" 18  [Put, Put new key]
+
+Tag "Put overwrite" (2 action(s)):
+  PutInput "a" 0   [Put, Put new key]
+  PutInput "a" 12  [Put, Put overwrite]
+
+...
+```
+
+This is the analogue of QuickCheck's `labelledExamples` and `quickcheck-lockstep`'s `tagActions`. Use it to confirm your generator and tagging actually exercise the cases you care about, before paying for a full property run. Because nothing real executes, `lsCmdExec` can be `error "unused"` if you want to write a coverage-only check.
+
 ## Failure diagnostics
 
 When a test fails, `hedgehog-lockstep` automatically `footnote`s the post-step model state at every command. Hedgehog only displays footnotes on failure, so passing tests pay nothing, but a failing test now shows the model trail alongside the shrunken command sequence (the analogue of `quickcheck-lockstep`'s `monitoring` counterexample enrichment). This requires `Show model`, which is already needed by Hedgehog's `Gen.sequential`.

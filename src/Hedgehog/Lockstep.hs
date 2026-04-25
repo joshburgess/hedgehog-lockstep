@@ -61,6 +61,11 @@ module Hedgehog.Lockstep
   , lockstepParallelM
   , lockstepParallelWithM
 
+    -- * Coverage exploration
+  , lockstepLabelledExamples
+  , LabelledExamples
+  , ModelStep (..)
+
     -- * Re-exports from Hedgehog
   , Var (..)
   , Symbolic
@@ -85,4 +90,5 @@ import Hedgehog.Lockstep.GVar
 import Hedgehog.Lockstep.Observe
 import Hedgehog.Lockstep.State
 import Hedgehog.Lockstep.Command
+import Hedgehog.Lockstep.Examples
 import Hedgehog.Lockstep.Property

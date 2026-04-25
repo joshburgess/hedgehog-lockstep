@@ -42,6 +42,13 @@ Initial release.
   `lsCmdObserve = runObservation (ObserveProject normM normR)` instead
   of writing the assertion by hand. This is the hedgehog-lockstep
   analogue of `quickcheck-lockstep`'s `Observable`/`ModelValue` split.
+- New module `Hedgehog.Lockstep.Examples` exposing
+  `lockstepLabelledExamples`, a model-only driver that samples random
+  command sequences, accumulates the tags emitted by `lsCmdTag`, and
+  prints one shortest sampled trace per tag. This is the analogue of
+  `QuickCheck`'s `labelledExamples` and `quickcheck-lockstep`'s
+  `tagActions`: it answers "is the generator actually hitting the
+  labelled cases I expect" without running the real system at all.
 - `lockstepCommands` for users who want to drive
   `Gen.sequential` / `executeSequential` directly.
 - README guidance and a `Test.KVStore` example for using
