@@ -57,6 +57,9 @@ test-suite hedgehog-lockstep-test
     Test.BuggyCounter
     Test.HandleStore
     Test.KVStore
+    Test.OpProjections
+    Test.ParallelKV
+    Test.PureSort
 
   build-depends:
     , base              >=4.20 && <4.22

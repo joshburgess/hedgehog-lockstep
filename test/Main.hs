@@ -4,17 +4,25 @@ import System.Exit (exitFailure, exitSuccess)
 import Test.KVStore (prop_kvSequential)
 import Test.HandleStore (prop_handleSequential)
 import Test.BuggyCounter (prop_buggyCounterDetected)
+import Test.OpProjections (prop_opProjections)
+import Test.ParallelKV (prop_kvParallel)
+import Test.PureSort (prop_pureSort)
 import Hedgehog (check)
 
 main :: IO ()
 main = do
   ok1 <- check prop_kvSequential
   ok2 <- check prop_handleSequential
+  ok3 <- check prop_kvParallel
+  ok4 <- check prop_pureSort
+  ok5 <- check prop_opProjections
   -- BuggyCounter should FAIL (model is deliberately wrong).
   -- We verify the failure is detected.
-  ok3 <- check prop_buggyCounterDetected
-  let bugDetected = not ok3
+  ok6 <- check prop_buggyCounterDetected
+  let bugDetected = not ok6
   putStrLn $ if bugDetected
-    then "  ✓ Buggy model correctly detected"
-    else "  ✗ Buggy model was NOT detected (bug in lockstep!)"
-  if ok1 && ok2 && bugDetected then exitSuccess else exitFailure
+    then "  Buggy model correctly detected"
+    else "  Buggy model was NOT detected (bug in lockstep!)"
+  if and [ok1, ok2, ok3, ok4, ok5, bugDetected]
+    then exitSuccess
+    else exitFailure
