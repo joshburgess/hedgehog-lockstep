@@ -73,3 +73,13 @@ Initial release.
 - README caveat documenting the dependency on `Hedgehog.Internal.State`.
 - `Test.UnitCoverage` exercising `applyOp`, `gvarLabel`, `mapGVar`, and
   `mkGVarId`.
+- `InterpretOp` class with `interpretOp :: op a b -> a -> Maybe b`.
+  `mkGVar` and `mapGVar` now accept any op type with `InterpretOp` and
+  `Show` instances, not just the built-in `Op`. Users can extend the
+  projection vocabulary (e.g., a list-head op) by defining their own
+  GADT and supplying instances. The built-in `Op` is now an instance of
+  `InterpretOp`. `applyOp` is kept as a synonym for `interpretOp`. This
+  is the analogue of `quickcheck-lockstep`'s `Operation`/`InterpretOp`
+  classes, closing the structural-flexibility gap with that library.
+- `Test.CustomOp` exercising a user-defined op (`MyOpHead :: MyOp [a] a`)
+  end-to-end through a real lockstep test.

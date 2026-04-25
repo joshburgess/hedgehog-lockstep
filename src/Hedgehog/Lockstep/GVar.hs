@@ -21,7 +21,7 @@ import Data.Functor.Classes (Ord1)
 import Hedgehog.Internal.State (Var (..), Concrete (..))
 import Data.Functor.Barbie (FunctorB (..), TraversableB (..))
 
-import Hedgehog.Lockstep.Op (Op, applyOp, showOp)
+import Hedgehog.Lockstep.Op (InterpretOp, interpretOp)
 import Hedgehog.Lockstep.State (ModelEnv, lookupModelEntry)
 
 -- | A generalized variable that projects a value of type @a@ from a
@@ -51,16 +51,19 @@ instance TraversableB (GVar a) where
 instance Show (GVar a v) where
   show (GVar _ label _) = "GVar." <> label
 
--- | Construct a t'GVar' using a typed 'Op' projection.
+-- | Construct a t'GVar' using a typed structural projection.
 --
 -- @modelX@ is the model-side output type stored in the environment.
--- The 'Op' projects from @modelX@ to the desired type @a@.
+-- The op projects from @modelX@ to the desired type @a@. Any op type with
+-- an 'InterpretOp' instance and a 'Show' instance works here. The library
+-- ships 'Hedgehog.Lockstep.Op.Op' as the default; users can extend the
+-- projection vocabulary by defining their own GADT.
 mkGVar
-  :: (Typeable modelX, Typeable realX, Ord realX)
-  => Var realX v -> Op modelX a -> GVar a v
+  :: (Typeable modelX, Typeable realX, Ord realX, InterpretOp op, Show (op modelX a))
+  => Var realX v -> op modelX a -> GVar a v
 mkGVar var op =
-  GVar var (showOp op) $ \dyn ->
-    fromDynamic dyn >>= applyOp op
+  GVar var (show op) $ \dyn ->
+    fromDynamic dyn >>= interpretOp op
 {-# INLINABLE mkGVar #-}
 
 -- | Construct a t'GVar' with an identity projection. Use when the
@@ -72,7 +75,7 @@ mkGVarId var =
   GVar var "id" fromDynamic
 {-# INLINABLE mkGVarId #-}
 
--- | Compose an additional 'Op' projection onto an existing t'GVar'.
+-- | Compose an additional projection onto an existing t'GVar'.
 --
 -- Useful when you already hold a t'GVar' to a structured value and want
 -- to project further. For example, given a @t'GVar' ('Either' err (h, name)) v@,
@@ -81,13 +84,15 @@ mkGVarId var =
 --
 -- The new t'GVar' shares the underlying Hedgehog t'Hedgehog.Internal.State.Var'
 -- and the existing resolution chain; only the final projection step
--- changes. The human-readable label is extended with the new 'Op'.
+-- changes. The human-readable label is extended with the new op.
 --
 -- This is the 'hedgehog-lockstep' analogue of @quickcheck-lockstep@'s
 -- @mapGVar@.
-mapGVar :: forall a b v. Op a b -> GVar a v -> GVar b v
+mapGVar
+  :: forall op a b v. (InterpretOp op, Show (op a b))
+  => op a b -> GVar a v -> GVar b v
 mapGVar op (GVar var label resolve) =
-  GVar var (label <> "." <> showOp op) (\dyn -> resolve dyn >>= applyOp op)
+  GVar var (label <> "." <> show op) (\dyn -> resolve dyn >>= interpretOp op)
 {-# INLINABLE mapGVar #-}
 
 -- | Resolve a t'GVar' against a model environment.

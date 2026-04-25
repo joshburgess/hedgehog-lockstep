@@ -42,6 +42,7 @@ module Hedgehog.Lockstep
 
     -- * Structural projections
   , Op (..)
+  , InterpretOp (..)
   , applyOp
   , (>>>)
 

@@ -126,6 +126,38 @@ gv     :: GVar (Either err (Handle, Name)) v
 gvHandle = mapGVar (OpRight >>> OpFst) gv  -- :: GVar Handle v
 ```
 
+### Custom projections
+
+The built-in `Op` covers pair, sum, identity, and composition. If you need
+a projection it doesn't have (list head, record fields, custom decoders),
+define your own GADT and write an `InterpretOp` instance plus a `Show`
+instance. `mkGVar` and `mapGVar` accept any op that satisfies those
+constraints:
+
+```haskell
+data MyOp a b where
+  MyOfOp   :: Op a b -> MyOp a b   -- embed the built-ins
+  MyOpHead :: MyOp [a] a           -- new: list head
+
+instance InterpretOp MyOp where
+  interpretOp (MyOfOp op) x       = interpretOp op x
+  interpretOp MyOpHead    []      = Nothing
+  interpretOp MyOpHead    (x : _) = Just x
+
+instance Show (MyOp a b) where
+  show (MyOfOp op) = show op
+  show MyOpHead    = "head"
+
+-- now usable anywhere a built-in Op was:
+gvHead :: Var [Int] v -> GVar Int v
+gvHead var = mkGVar var (MyOpHead :: MyOp [Int] Int)
+```
+
+The library uses the `InterpretOp` instance to apply the projection during
+both model and real resolution; the `Show` instance feeds the `gvarLabel`
+chain shown in failure messages. See `test/Test/CustomOp.hs` for a full
+end-to-end example.
+
 ## Structured observations
 
 Plain `lsCmdObserve = \m r -> m === r` only works when the model output and the real output have the same type. Real APIs often violate that: a real `open` returns a `Handle` while the model returns an index; the real call returns a verbose error string while the model returns an abstract tag; both sides return rich records but only a subset of fields should be compared.

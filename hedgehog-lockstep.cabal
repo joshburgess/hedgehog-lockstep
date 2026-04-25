@@ -90,6 +90,7 @@ test-suite hedgehog-lockstep-test
 
   other-modules:
     Test.BuggyCounter
+    Test.CustomOp
     Test.HandleStore
     Test.KVStore
     Test.LabelledExamples

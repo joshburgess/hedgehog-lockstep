@@ -255,6 +255,20 @@ data Op a b where
 generated against a symbolic variable whose concrete outcome turns out to not
 match the projection.
 
+The op set is extensible. `InterpretOp` is a class with one method:
+
+```haskell
+class InterpretOp op where
+  interpretOp :: op a b -> a -> Maybe b
+```
+
+Users who need projections beyond pair/sum (list head, record fields, custom
+decoders) define their own GADT, write an `InterpretOp` instance and a `Show`
+instance, and pass it to `mkGVar` or `mapGVar` exactly like `Op`. The
+built-in `Op` is one instance among many; the library does not commit users
+to its constructor set. This mirrors `quickcheck-lockstep`'s
+`Operation`/`InterpretOp` design.
+
 The original design considered storing projected model values directly in
 `LockstepState` (Option A in an earlier draft). The `GVar`-based Option B was
 chosen because it keeps the state type small and mirrors the
@@ -432,7 +446,7 @@ peer would be interesting future work.
 | Aspect | quickcheck-lockstep | hedgehog-lockstep |
 |--------|-------------------|-------------------|
 | **Shrinking** | Manual (`shrinkWithVars`) | Integrated (free) |
-| **Variables** | `GVar` with `Op` DSL | `GVar` adapted for `Symbolic`/`Concrete` |
+| **Variables** | `GVar` with `Op` DSL, extensible via `Operation`/`InterpretOp` | `GVar` adapted for `Symbolic`/`Concrete`, extensible via `InterpretOp` |
 | **Model / real divergence** | `ModelValue`/`Observable` GADTs plus `observeModel`/`observeReal` | `modelOutput` existential plus per-command `lsCmdObserve`, with `Observation` GADT (`ObserveEq`/`ObserveProject`/`ObservePair`/`ObserveCustom`) for structured cases |
 | **Variable tracking** | Manual `usedVars` | Automatic via `TraversableB` |
 | **Parallel testing** | Not supported | Supported via `executeParallel` |
@@ -445,7 +459,6 @@ peer would be interesting future work.
 
 - **Dynamic logic**: `quickcheck-dynamic` supports DL specifications; Hedgehog does not.
 - **Single GADT elegance**: the single `Action` GADT in lockstep is arguably more elegant than a list of `Command` records. Pattern matching on a closed GADT gives exhaustiveness checking.
-- **`labelledExamples`**: QuickCheck has this; Hedgehog doesn't have a direct equivalent (though we can approximate with classification).
 
 ### What's Gained
 
