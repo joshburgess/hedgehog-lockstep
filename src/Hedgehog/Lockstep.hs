@@ -18,6 +18,7 @@ module Hedgehog.Lockstep
   , mkGVarId
   , resolveGVar
   , concreteGVar
+  , gvarLabel
 
     -- * Structural projections
   , Op (..)
@@ -28,6 +29,7 @@ module Hedgehog.Lockstep
   , lockstepProperty
   , lockstepPropertyWith
   , lockstepParallel
+  , lockstepParallelWith
 
     -- * Re-exports from Hedgehog
   , Var (..)

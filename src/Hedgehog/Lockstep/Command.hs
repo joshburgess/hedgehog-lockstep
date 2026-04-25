@@ -26,6 +26,23 @@ import Hedgehog.Lockstep.State
 -- advance the model state and stores the model result. In 'Ensure', it
 -- retrieves the stored model result and compares it with the real output
 -- via 'lsCmdObserve'.
+--
+-- == Type constraints
+--
+-- The existential constraints on @output@ and @modelOutput@ are:
+--
+-- * @'Typeable' output@, @'Ord' output@: required by the model environment,
+--   which keys entries by 'Hedgehog.Internal.State.Var' identity. The 'Ord'
+--   instance is used by 'Data.Functor.Classes.Ord1' for phase-polymorphic
+--   'Hedgehog.Internal.State.Var' comparison.
+--
+-- * @'Typeable' modelOutput@, @'Eq' modelOutput@, @'Show' modelOutput@: the
+--   model-side result is stored as 'Data.Dynamic.Dynamic' and may be compared
+--   or displayed in error reports.
+--
+-- The @'Ord' output@ constraint is a real limitation: truly opaque types like
+-- @'System.IO.Handle'@ that lack an 'Ord' instance need a newtype wrapper that
+-- defines ordering (for example, by an allocation counter).
 data LockstepCmd m model = forall input output modelOutput.
   ( TraversableB input
   , Show (input Symbolic)

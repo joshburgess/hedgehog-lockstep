@@ -3,6 +3,7 @@ module Hedgehog.Lockstep.Property
   ( lockstepProperty
   , lockstepPropertyWith
   , lockstepParallel
+  , lockstepParallelWith
   , lockstepCommands
   ) where
 
@@ -74,6 +75,9 @@ lockstepPropertyWith model0 maxActions setup reset mkCmds = property $ do
 --
 -- Commands run in @PropertyT IO@. Use 'Hedgehog.evalIO' to lift
 -- @IO@ actions inside 'lsCmdExec'.
+--
+-- For tests that need an IO resource (the common case), use
+-- 'lockstepParallelWith'.
 lockstepParallel
   :: Show model
   => model
@@ -86,4 +90,37 @@ lockstepParallel model0 maxPrefix maxBranch cmds = property $ do
   actions <- forAll $
     Gen.parallel (Range.linear 1 maxPrefix) (Range.linear 1 maxBranch)
       (initialLockstepState model0) commands
+  executeParallel (initialLockstepState model0) actions
+
+-- | Run a parallel lockstep property test with IO-based resource setup.
+--
+-- Like 'lockstepPropertyWith' but uses 'Gen.parallel' and 'executeParallel'
+-- to test linearizability of concurrent operations.
+--
+-- The @IO env@ action creates the resource before generation. The reset
+-- callback runs before execution (per test case). The commands must be
+-- thread-safe: concurrent 'modifyIORef'' is not safe, for example; use
+-- 'Data.IORef.atomicModifyIORef'' or 'Control.Concurrent.MVar.MVar' / 'Control.Concurrent.STM.TVar'
+-- instead.
+lockstepParallelWith
+  :: Show model
+  => model
+  -> Int
+  -- ^ Max actions in the sequential prefix
+  -> Int
+  -- ^ Max actions per parallel branch
+  -> IO env
+  -- ^ Create resource (runs once per test case)
+  -> (env -> IO ())
+  -- ^ Reset resource (runs before each execution, including shrink attempts)
+  -> (env -> [LockstepCmd (PropertyT IO) model])
+  -- ^ Commands using the resource
+  -> Property
+lockstepParallelWith model0 maxPrefix maxBranch setup reset mkCmds = property $ do
+  env <- evalIO setup
+  let commands = lockstepCommands (mkCmds env)
+  actions <- forAll $
+    Gen.parallel (Range.linear 1 maxPrefix) (Range.linear 1 maxBranch)
+      (initialLockstepState model0) commands
+  evalIO (reset env)
   executeParallel (initialLockstepState model0) actions
