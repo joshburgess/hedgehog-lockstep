@@ -50,6 +50,10 @@ cmdSort = LockstepCmd
   , lsCmdRequire = \_ _ -> True
 
   , lsCmdObserve = \expected actual -> expected === actual
+
+  -- System invariant: a sorted list is monotonically non-decreasing.
+  , lsCmdInvariants = \_ xs ->
+      assert (and (zipWith (<=) xs (drop 1 xs)))
   }
 
 prop_pureSort :: Property

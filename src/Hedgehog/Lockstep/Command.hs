@@ -73,6 +73,16 @@ data LockstepCmd m model = forall input output modelOutput.
     -- | Compare model output with real output.
     -- Use Hedgehog assertions ('===' etc.) to report mismatches.
   , lsCmdObserve :: modelOutput -> output -> Test ()
+
+    -- | Additional invariants to check after each command, separate from
+    -- the lockstep model-vs-real equality check in 'lsCmdObserve'.
+    --
+    -- Receives the post-state model and the real output. Use this for
+    -- system invariants that hold regardless of the lockstep comparison
+    -- (for example, "size never goes negative" or "no orphan handles").
+    --
+    -- Use @\\_ _ -> 'pure' ()@ if you have nothing extra to check.
+  , lsCmdInvariants :: model -> output -> Test ()
   }
 
 -- | Convert a 'LockstepCmd' into a Hedgehog 'Command'.
@@ -98,7 +108,9 @@ toLockstepCommand (LockstepCmd{..}) = Command gen exec callbacks
           case lsEntries newSt of
             (ModelEntry _ dyn : _) ->
               case fromDynamic dyn of
-                Just modelOut -> lsCmdObserve modelOut output
+                Just modelOut -> do
+                  lsCmdObserve modelOut output
+                  lsCmdInvariants (lsModel newSt) output
                 Nothing -> do
                   footnote "hedgehog-lockstep internal error: model result type mismatch"
                   failure

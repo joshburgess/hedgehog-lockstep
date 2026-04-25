@@ -92,6 +92,8 @@ cmdPut store = LockstepCmd
   , lsCmdRequire = \_ _ -> True
 
   , lsCmdObserve = \() () -> label "Put"
+
+  , lsCmdInvariants = \_ _ -> pure ()
   }
 
 cmdGet :: Store -> LockstepCmd (PropertyT IO) Model
@@ -111,6 +113,8 @@ cmdGet store = LockstepCmd
       classify "Get hit"  (isJust expected)
       classify "Get miss" (not (isJust expected))
       expected === actual
+
+  , lsCmdInvariants = \_ _ -> pure ()
   }
 
 cmdDelete :: Store -> LockstepCmd (PropertyT IO) Model
@@ -130,6 +134,8 @@ cmdDelete store = LockstepCmd
   , lsCmdRequire = \_ _ -> True
 
   , lsCmdObserve = \() () -> label "Delete"
+
+  , lsCmdInvariants = \_ _ -> pure ()
   }
 
 cmdSize :: Store -> LockstepCmd (PropertyT IO) Model
@@ -147,6 +153,9 @@ cmdSize store = LockstepCmd
   , lsCmdObserve = \expected actual -> do
       label "Size"
       expected === actual
+
+  -- System invariant: store size is never negative.
+  , lsCmdInvariants = \_ size -> assert (size >= 0)
   }
 
 -- ---------------------------------------------------------------------------

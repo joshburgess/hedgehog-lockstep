@@ -35,20 +35,22 @@ instance TraversableB GetInput where btraverse _ (GetInput k) = pure (GetInput k
 -- Define commands
 cmdPut :: IORef (Map String Int) -> LockstepCmd (PropertyT IO) Model
 cmdPut store = LockstepCmd
-  { lsCmdGen     = \_ -> Just $ PutInput <$> Gen.element ["a","b","c"] <*> Gen.int (Range.linear 0 100)
-  , lsCmdExec    = \(PutInput k v) -> evalIO $ modifyIORef' store (Map.insert k v) >> pure ()
-  , lsCmdModel   = \st (PutInput k v) -> ((), Map.insert k v (getModel st))
-  , lsCmdRequire = \_ _ -> True
-  , lsCmdObserve = \() () -> pure ()
+  { lsCmdGen        = \_ -> Just $ PutInput <$> Gen.element ["a","b","c"] <*> Gen.int (Range.linear 0 100)
+  , lsCmdExec       = \(PutInput k v) -> evalIO $ modifyIORef' store (Map.insert k v) >> pure ()
+  , lsCmdModel      = \st (PutInput k v) -> ((), Map.insert k v (getModel st))
+  , lsCmdRequire    = \_ _ -> True
+  , lsCmdObserve    = \() () -> pure ()
+  , lsCmdInvariants = \_ _ -> pure ()
   }
 
 cmdGet :: IORef (Map String Int) -> LockstepCmd (PropertyT IO) Model
 cmdGet store = LockstepCmd
-  { lsCmdGen     = \_ -> Just $ GetInput <$> Gen.element ["a","b","c"]
-  , lsCmdExec    = \(GetInput k) -> evalIO $ Map.lookup k <$> readIORef store
-  , lsCmdModel   = \st (GetInput k) -> (Map.lookup k (getModel st), getModel st)
-  , lsCmdRequire = \_ _ -> True
-  , lsCmdObserve = \expected actual -> expected === actual
+  { lsCmdGen        = \_ -> Just $ GetInput <$> Gen.element ["a","b","c"]
+  , lsCmdExec       = \(GetInput k) -> evalIO $ Map.lookup k <$> readIORef store
+  , lsCmdModel      = \st (GetInput k) -> (Map.lookup k (getModel st), getModel st)
+  , lsCmdRequire    = \_ _ -> True
+  , lsCmdObserve    = \expected actual -> expected === actual
+  , lsCmdInvariants = \_ _ -> pure ()
   }
 
 -- Run the property
@@ -124,6 +126,7 @@ Partial projections (`OpLeft`, `OpRight`) return `Nothing` on mismatch.
 | `lsCmdModel` | `forall v. Ord1 v => LockstepState model v -> input v -> (modelOutput, model)` | Pure model step |
 | `lsCmdRequire` | `model -> input Symbolic -> Bool` | Additional preconditions |
 | `lsCmdObserve` | `modelOutput -> output -> Test ()` | Compare model and real results |
+| `lsCmdInvariants` | `model -> output -> Test ()` | System invariants beyond the lockstep check |
 
 ## Running tests
 
@@ -160,6 +163,20 @@ cmdGet store = LockstepCmd
 ```
 
 Hedgehog aggregates the labels across the run and prints them in the failure report (or always, if you use `cover`). See `test/Test/KVStore.hs` for a full example.
+
+## System invariants
+
+`lsCmdObserve` is for the lockstep equality check between the model output and the real output. For invariants on the post-state model itself (or on the real output independent of the model), use `lsCmdInvariants`. It receives the post-state model and the real output, runs in `Test ()`, and fires after every command.
+
+```haskell
+cmdSize store = LockstepCmd
+  { ...
+  , lsCmdObserve    = \expected actual -> expected === actual
+  , lsCmdInvariants = \_ size -> assert (size >= 0)
+  }
+```
+
+If you have nothing extra to check, write `lsCmdInvariants = \_ _ -> pure ()`.
 
 ## Building
 

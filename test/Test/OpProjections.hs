@@ -101,6 +101,8 @@ cmdMake ref = LockstepCmd
   , lsCmdRequire = \_ _ -> True
 
   , lsCmdObserve = \expected actual -> expected === actual
+
+  , lsCmdInvariants = \_ _ -> pure ()
   }
 
 -- ---------------------------------------------------------------------------
@@ -130,6 +132,8 @@ cmdReadDoubled = LockstepCmd
   , lsCmdRequire = \_ _ -> True
 
   , lsCmdObserve = \expected actual -> expected === actual
+
+  , lsCmdInvariants = \_ _ -> pure ()
   }
 
 -- ---------------------------------------------------------------------------
@@ -159,6 +163,8 @@ cmdReadError = LockstepCmd
   , lsCmdRequire = \_ _ -> True
 
   , lsCmdObserve = \expected actual -> expected === actual
+
+  , lsCmdInvariants = \_ _ -> pure ()
   }
 
 -- ---------------------------------------------------------------------------

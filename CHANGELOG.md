@@ -26,3 +26,6 @@ Initial release.
   `Gen.sequential` / `executeSequential` directly.
 - README guidance and a `Test.KVStore` example for using
   `Hedgehog.label` / `classify` inside `lsCmdObserve` for coverage labels.
+- `lsCmdInvariants :: model -> output -> Test ()` field on `LockstepCmd`
+  for system invariants that should hold after every command, separate
+  from the lockstep equality check in `lsCmdObserve`.

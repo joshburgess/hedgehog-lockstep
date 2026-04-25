@@ -90,6 +90,8 @@ cmdPut putImpl store = LockstepCmd
   , lsCmdRequire = \_ _ -> True
 
   , lsCmdObserve = \expected actual -> expected === actual
+
+  , lsCmdInvariants = \_ _ -> pure ()
   }
 
 cmdGet :: Store -> LockstepCmd (PropertyT IO) Model
@@ -105,6 +107,8 @@ cmdGet store = LockstepCmd
   , lsCmdRequire = \_ _ -> True
 
   , lsCmdObserve = \expected actual -> expected === actual
+
+  , lsCmdInvariants = \_ _ -> pure ()
   }
 
 -- ---------------------------------------------------------------------------

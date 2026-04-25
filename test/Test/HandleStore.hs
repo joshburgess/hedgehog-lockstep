@@ -185,6 +185,8 @@ cmdOpen ref = LockstepCmd
 
   , lsCmdObserve = \modelResult realResult ->
       fmap (const ()) modelResult === fmap (const ()) realResult
+
+  , lsCmdInvariants = \_ _ -> pure ()
   }
 
 cmdWrite :: IORef RealStore -> LockstepCmd (PropertyT IO) Model
@@ -208,6 +210,8 @@ cmdWrite ref = LockstepCmd
   , lsCmdRequire = \_ _ -> True
 
   , lsCmdObserve = \expected actual -> expected === actual
+
+  , lsCmdInvariants = \_ _ -> pure ()
   }
 
 cmdRead :: IORef RealStore -> LockstepCmd (PropertyT IO) Model
@@ -230,6 +234,8 @@ cmdRead ref = LockstepCmd
   , lsCmdRequire = \_ _ -> True
 
   , lsCmdObserve = \expected actual -> expected === actual
+
+  , lsCmdInvariants = \_ _ -> pure ()
   }
 
 cmdClose :: IORef RealStore -> LockstepCmd (PropertyT IO) Model
@@ -252,6 +258,11 @@ cmdClose ref = LockstepCmd
   , lsCmdRequire = \_ _ -> True
 
   , lsCmdObserve = \expected actual -> expected === actual
+
+  -- System invariant: closed handles never appear in the model's open set,
+  -- so the open-handle count never exceeds the next-handle counter.
+  , lsCmdInvariants = \model _ ->
+      assert (Map.size (mHandles model) <= mNextHandle model)
   }
 
 -- ---------------------------------------------------------------------------
