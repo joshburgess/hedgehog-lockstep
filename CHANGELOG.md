@@ -29,3 +29,7 @@ Initial release.
 - `lsCmdInvariants :: model -> output -> Test ()` field on `LockstepCmd`
   for system invariants that should hold after every command, separate
   from the lockstep equality check in `lsCmdObserve`.
+- Module-level Haddock for every public module, plus disambiguated
+  identifier references so Haddock builds cleanly with no warnings.
+- README caveat documenting the dependency on `Hedgehog.Internal.State`.
+- `Test.UnitCoverage` exercising `applyOp`, `gvarLabel`, and `mkGVarId`.

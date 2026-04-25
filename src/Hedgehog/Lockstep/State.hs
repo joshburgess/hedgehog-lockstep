@@ -1,4 +1,10 @@
 {-# LANGUAGE RankNTypes #-}
+-- | The lockstep state: the user's pure model alongside a model environment
+-- that maps Hedgehog t'Hedgehog.Internal.State.Var's to their model-side
+-- output values.
+--
+-- The model environment is what makes t'Hedgehog.Lockstep.GVar.GVar'
+-- resolution work across the symbolic and concrete phases.
 module Hedgehog.Lockstep.State
   ( LockstepState (..)
   , ModelEntry (..)
@@ -26,15 +32,17 @@ data ModelEntry v where
     -> !Dynamic      -- ^ Model result for this variable
     -> ModelEntry v
 
--- | An existentially-wrapped 'Var' with its type witness.
+-- | An existentially-wrapped t'Hedgehog.Internal.State.Var' with its
+-- type witness.
 data SomeVar v where
   SomeVar :: Typeable a => !(Var a v) -> SomeVar v
 
 -- | Lockstep state wrapping a user-defined model.
 --
 -- Tracks the pure model state alongside a model environment that maps
--- variables to model-side output values. This enables 'GVar' resolution
--- during both generation and execution phases, including after shrinking.
+-- variables to model-side output values. This enables
+-- t'Hedgehog.Lockstep.GVar.GVar' resolution during both generation and
+-- execution phases, including after shrinking.
 data LockstepState model v = LockstepState
   { lsModel     :: !model
   , lsNextVarId :: {-# UNPACK #-} !Int
@@ -72,7 +80,8 @@ getNextVarId :: LockstepState model v -> Int
 getNextVarId = lsNextVarId
 
 -- | Enumerate all variables of a given type.
--- Useful in generators to pick a variable for a 'GVar'.
+-- Useful in generators to pick a variable for a
+-- t'Hedgehog.Lockstep.GVar.GVar'.
 varsOfType
   :: forall a model. Typeable a
   => LockstepState model Symbolic -> [Var a Symbolic]
@@ -82,10 +91,12 @@ varsOfType st =
   , Just Refl <- [eqT @a @b]
   ]
 
--- | Look up a model result by matching the 'Var' identity.
+-- | Look up a model result by matching the
+-- t'Hedgehog.Internal.State.Var' identity.
 -- Uses 'Ord1' for phase-polymorphic comparison:
--- for 'Symbolic', compares by hedgehog Name (stable across shrinking);
--- for 'Concrete', compares by value.
+-- for t'Hedgehog.Internal.State.Symbolic', compares by hedgehog Name
+-- (stable across shrinking); for t'Hedgehog.Internal.State.Concrete',
+-- compares by value.
 lookupModelEntry
   :: forall x v. (Typeable x, Ord x, Ord1 v)
   => Var x v -> [ModelEntry v] -> Maybe Dynamic
@@ -102,7 +113,7 @@ lookupModelEntry var entries = go entries
     varEq (Var v1) (Var v2) = liftCompare compare v1 v2 == EQ
 
 -- | Insert a model result into the state and register the variable.
--- Used internally by 'toLockstepCommand'.
+-- Used internally by 'Hedgehog.Lockstep.Command.toLockstepCommand'.
 insertModelResult
   :: (Typeable modelOutput, Typeable output, Ord output)
   => Var output v -> modelOutput -> LockstepState model v -> LockstepState model v

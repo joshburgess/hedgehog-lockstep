@@ -145,6 +145,8 @@ lockstepCommands :: [LockstepCmd m model] -> [Command Gen m (LockstepState model
 
 Use the `*With` variants when commands need IO resources (e.g., `IORef`, database connections). The reset callback runs before each execution attempt, including during shrinking.
 
+The bare `lockstepProperty` and `lockstepParallel` are for commands that don't need a resource. The commands still run in `PropertyT IO` (Hedgehog requires it), but `lsCmdExec` can simply lift a pure value with `pure`. See `test/Test/PureSort.hs` for a fully pure example.
+
 Parallel operations must be thread-safe: use `atomicModifyIORef'`, `MVar`, or `TVar` rather than `modifyIORef'`.
 
 ## Coverage labels
@@ -191,4 +193,8 @@ cabal test
 
 This is a v0.1 implementation. See the [design document](docs/DESIGN.md) for the full rationale and comparison with quickcheck-lockstep.
 
-Known limitation: `LockstepCmd` requires `Ord output` on command output types. This is needed for Var-identity-based model environment lookup. Most types satisfy this; truly opaque types (e.g., `IO.Handle`) would need a newtype wrapper.
+### Known caveats
+
+- **`Ord output` constraint**. `LockstepCmd` requires `Ord output` on command output types. This is needed for Var-identity-based model environment lookup. Most types satisfy this; truly opaque types (e.g., `IO.Handle`) would need a newtype wrapper that defines ordering (for example, by an allocation counter).
+
+- **Depends on `Hedgehog.Internal.State`**. The library imports a handful of types and constructors (`Var`, `Symbolic`, `Concrete`, `Command`, `Callback`) from Hedgehog's internal module because the public surface doesn't expose enough to drive the state machine framework directly. Hedgehog's PVP guarantees don't cover internal modules, so a Hedgehog minor release could in principle break the build. The cabal file pins `hedgehog >=1.4 && <1.6` to limit exposure; bump the upper bound only after rebuilding against the new version.

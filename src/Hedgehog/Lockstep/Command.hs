@@ -1,5 +1,12 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE QuantifiedConstraints #-}
+-- | The t'LockstepCmd' record bundling a single API operation with its
+-- model interpretation, observation, and post-state invariants.
+--
+-- Construct one t'LockstepCmd' per operation in your API. Convert the
+-- list to Hedgehog t'Hedgehog.Internal.State.Command's via
+-- 'toLockstepCommand' (or use
+-- 'Hedgehog.Lockstep.Property.lockstepCommands' to do it in bulk).
 module Hedgehog.Lockstep.Command
   ( LockstepCmd (..)
   , toLockstepCommand
@@ -63,15 +70,17 @@ data LockstepCmd m model = forall input output modelOutput.
     -- | Run the model step. Given the current lockstep state and input,
     -- return the model's predicted output and the updated model.
     --
-    -- This runs in @forall v. Ord1 v@ context. Use 'resolveGVar' with
-    -- 'getEntries' to resolve 'GVar's in the input to their model values.
+    -- This runs in @forall v. Ord1 v@ context. Use
+    -- 'Hedgehog.Lockstep.GVar.resolveGVar' with
+    -- 'Hedgehog.Lockstep.State.getEntries' to resolve
+    -- t'Hedgehog.Lockstep.GVar.GVar's in the input to their model values.
   , lsCmdModel :: forall v. Ord1 v => LockstepState model v -> input v -> (modelOutput, model)
 
     -- | Additional preconditions beyond variable-definedness.
   , lsCmdRequire :: model -> input Symbolic -> Bool
 
     -- | Compare model output with real output.
-    -- Use Hedgehog assertions ('===' etc.) to report mismatches.
+    -- Use Hedgehog assertions ('Hedgehog.===' etc.) to report mismatches.
   , lsCmdObserve :: modelOutput -> output -> Test ()
 
     -- | Additional invariants to check after each command, separate from
@@ -85,7 +94,8 @@ data LockstepCmd m model = forall input output modelOutput.
   , lsCmdInvariants :: model -> output -> Test ()
   }
 
--- | Convert a 'LockstepCmd' into a Hedgehog 'Command'.
+-- | Convert a t'LockstepCmd' into a Hedgehog
+-- t'Hedgehog.Internal.State.Command'.
 toLockstepCommand
   :: (Monad m)
   => LockstepCmd m model -> Command Gen m (LockstepState model)

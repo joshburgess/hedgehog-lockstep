@@ -1,4 +1,10 @@
 {-# LANGUAGE RankNTypes #-}
+-- | Generalized variables: typed projections from prior action outputs.
+--
+-- A t'GVar' wraps a Hedgehog t'Hedgehog.Internal.State.Var' together with
+-- an 'Hedgehog.Lockstep.Op.Op' that projects a component out of the
+-- action's result. Later commands use t'GVar's to refer to those
+-- components in both the model and the real system.
 module Hedgehog.Lockstep.GVar
   ( GVar (..)
   , mkGVar
@@ -20,10 +26,12 @@ import Hedgehog.Lockstep.State (ModelEntry, lookupModelEntry)
 -- | A generalized variable that projects a value of type @a@ from a
 -- previous action's output via the model environment.
 --
--- During generation ('Symbolic' phase), the 'GVar' tracks which variable
--- it references. During execution ('Concrete' phase), the underlying
--- 'Var' resolves to the real value, but model-side resolution always
--- goes through the model environment via 'Var' identity matching.
+-- During generation (t'Hedgehog.Internal.State.Symbolic' phase), the
+-- t'GVar' tracks which variable it references. During execution
+-- (t'Hedgehog.Internal.State.Concrete' phase), the underlying t'Hedgehog.Internal.State.Var'
+-- resolves to the real value, but model-side resolution always goes
+-- through the model environment via t'Hedgehog.Internal.State.Var'
+-- identity matching.
 data GVar a v where
   GVar
     :: (Typeable x, Ord x)
@@ -42,7 +50,7 @@ instance TraversableB (GVar a) where
 instance Show (GVar a v) where
   show (GVar _ label _) = "GVar." <> label
 
--- | Construct a 'GVar' using a typed 'Op' projection.
+-- | Construct a t'GVar' using a typed 'Op' projection.
 --
 -- @modelX@ is the model-side output type stored in the environment.
 -- The 'Op' projects from @modelX@ to the desired type @a@.
@@ -53,7 +61,7 @@ mkGVar var op =
   GVar var (showOp op) $ \dyn ->
     fromDynamic dyn >>= applyOp op
 
--- | Construct a 'GVar' with an identity projection. Use when the
+-- | Construct a t'GVar' with an identity projection. Use when the
 -- entire model output is the desired value.
 mkGVarId
   :: (Typeable a, Typeable realX, Ord realX)
@@ -61,13 +69,14 @@ mkGVarId
 mkGVarId var =
   GVar var "id" fromDynamic
 
--- | Resolve a 'GVar' against a model environment.
--- Uses 'Ord1' for phase-polymorphic 'Var' comparison.
+-- | Resolve a t'GVar' against a model environment.
+-- Uses 'Ord1' for phase-polymorphic t'Hedgehog.Internal.State.Var'
+-- comparison.
 resolveGVar :: Ord1 v => GVar a v -> [ModelEntry v] -> Maybe a
 resolveGVar (GVar var _ resolve) entries =
   lookupModelEntry var entries >>= resolve
 
--- | Extract the projected value from a 'GVar' in the 'Concrete' phase.
+-- | Extract the projected value from a t'GVar' in the t'Hedgehog.Internal.State.Concrete' phase.
 --
 -- This applies the resolution function to the real output value. Works when
 -- the real and model types share the same structure at the projected position
@@ -75,6 +84,6 @@ resolveGVar (GVar var _ resolve) entries =
 concreteGVar :: GVar a Concrete -> Maybe a
 concreteGVar (GVar (Var (Concrete x)) _ resolve) = resolve (toDyn x)
 
--- | Get the human-readable label of a 'GVar'.
+-- | Get the human-readable label of a t'GVar'.
 gvarLabel :: GVar a v -> String
 gvarLabel (GVar _ label _) = label

@@ -1,4 +1,11 @@
 {-# LANGUAGE RankNTypes #-}
+-- | Property runners that turn a list of 'Hedgehog.Lockstep.Command.LockstepCmd'
+-- values into a Hedgehog 'Hedgehog.Property'.
+--
+-- The @With@ variants set up an IO resource (an 'Data.IORef.IORef', a
+-- database handle, etc.) that the commands use; the bare variants are for
+-- commands that don't need one. The parallel variants generate concurrent
+-- suffixes and check linearizability via Hedgehog's @executeParallel@.
 module Hedgehog.Lockstep.Property
   ( lockstepProperty
   , lockstepPropertyWith
@@ -24,7 +31,8 @@ import Hedgehog.Internal.State (Command)
 import Hedgehog.Lockstep.State (LockstepState, initialLockstepState)
 import Hedgehog.Lockstep.Command (LockstepCmd, toLockstepCommand)
 
--- | Convert a list of 'LockstepCmd's into Hedgehog 'Command's.
+-- | Convert a list of 'LockstepCmd's into Hedgehog
+-- 'Hedgehog.Internal.State.Command's.
 lockstepCommands
   :: (Monad m)
   => [LockstepCmd m model] -> [Command Gen m (LockstepState model)]
@@ -74,7 +82,7 @@ lockstepPropertyWith model0 maxActions setup reset mkCmds = property $ do
 -- | Run a parallel lockstep property test for linearizability.
 --
 -- Commands run in @PropertyT IO@. Use 'Hedgehog.evalIO' to lift
--- @IO@ actions inside 'lsCmdExec'.
+-- @IO@ actions inside @lsCmdExec@.
 --
 -- For tests that need an IO resource (the common case), use
 -- 'lockstepParallelWith'.
@@ -99,9 +107,9 @@ lockstepParallel model0 maxPrefix maxBranch cmds = property $ do
 --
 -- The @IO env@ action creates the resource before generation. The reset
 -- callback runs before execution (per test case). The commands must be
--- thread-safe: concurrent 'modifyIORef'' is not safe, for example; use
--- 'Data.IORef.atomicModifyIORef'' or 'Control.Concurrent.MVar.MVar' / 'Control.Concurrent.STM.TVar'
--- instead.
+-- thread-safe: concurrent 'Data.IORef.modifyIORef'' is not safe, for
+-- example; use 'Data.IORef.atomicModifyIORef'',
+-- 'Control.Concurrent.MVar.MVar', or 'Control.Concurrent.STM.TVar' instead.
 lockstepParallelWith
   :: Show model
   => model

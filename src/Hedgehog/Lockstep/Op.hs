@@ -1,3 +1,8 @@
+-- | Structural projections used with 'Hedgehog.Lockstep.GVar.GVar' to
+-- extract components from compound action outputs.
+--
+-- For example, if an action returns @'Either' err ('Hedgehog.Internal.State.Var' h, name)@,
+-- the projection @'OpRight' '>>>' 'OpFst'@ extracts the @h@.
 module Hedgehog.Lockstep.Op
   ( Op (..)
   , applyOp
@@ -7,7 +12,8 @@ module Hedgehog.Lockstep.Op
 
 -- | Structural projections for extracting components from compound types.
 --
--- Used with 'GVar' to project model values from composite action outputs.
+-- Used with 'Hedgehog.Lockstep.GVar.GVar' to project model values from
+-- composite action outputs.
 -- For example, if an action returns @Either Err (Handle, FilePath)@, you can
 -- compose @OpRight '>>>' OpFst@ to extract the @Handle@.
 --

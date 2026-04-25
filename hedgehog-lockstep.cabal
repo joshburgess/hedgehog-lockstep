@@ -93,6 +93,7 @@ test-suite hedgehog-lockstep-test
     Test.OpProjections
     Test.ParallelKV
     Test.PureSort
+    Test.UnitCoverage
 
   build-depends:
     , base              >=4.18 && <4.22
