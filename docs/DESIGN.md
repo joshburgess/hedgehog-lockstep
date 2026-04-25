@@ -187,7 +187,7 @@ data LockstepState model v = LockstepState
   { lsModel     :: !model
   , lsNextVarId :: !Int
   , lsEntries   :: !(ModelEnv v)
-  , lsVars      :: ![SomeVar v]
+  , lsVars      :: !(Map TypeRep [SomeVar v])
   , lsLastEntry :: !(Maybe Dynamic)
   }
 
@@ -196,10 +196,11 @@ newtype ModelEnv v = ModelEnv (Map (VarKey v) Dynamic)
 
 `lsEntries` is the lockstep environment: a `Map` keyed by an existential
 `VarKey` that wraps a Hedgehog `Var` with phase-polymorphic ordering. Values
-are model-side results stored as `Dynamic`. `lsVars` is a parallel list used
-by `varsOfType` to enumerate available variables during generation.
-`lsLastEntry` caches the most recently inserted result so the `Ensure`
-callback can compare it with the real output without re-scanning.
+are model-side results stored as `Dynamic`. `lsVars` is bucketed by type so
+`varsOfType` is a single `Map` lookup followed by a per-bucket fold rather
+than a linear scan over every variable seen so far. `lsLastEntry` caches the
+most recently inserted result so the `Ensure` callback can compare it with
+the real output without re-scanning.
 
 The environment supports both phases:
 

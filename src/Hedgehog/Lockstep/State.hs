@@ -24,7 +24,7 @@ import Data.Dynamic (Dynamic, toDyn)
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Proxy (Proxy (..))
-import Data.Typeable (Typeable, eqT, typeRep)
+import Data.Typeable (TypeRep, Typeable, eqT, typeRep)
 import Type.Reflection ((:~:) (..))
 import Data.Functor.Classes (Ord1, liftCompare)
 import Hedgehog.Internal.State (Var (..), Symbolic)
@@ -73,7 +73,9 @@ data LockstepState model v = LockstepState
   { lsModel     :: !model
   , lsNextVarId :: {-# UNPACK #-} !Int
   , lsEntries   :: !(ModelEnv v)
-  , lsVars      :: ![SomeVar v]
+  , lsVars      :: !(Map TypeRep [SomeVar v])
+  -- ^ Variables grouped by type, so 'varsOfType' is a single 'Map'
+  -- lookup rather than a linear filter over all variables.
   , lsLastEntry :: !(Maybe Dynamic)
   -- ^ The most recently inserted model result, used by the @Ensure@
   -- callback to compare against the real output.
@@ -84,7 +86,7 @@ instance Show model => Show (LockstepState model v) where
     showString "LockstepState {model = " .
     showsPrec 0 (lsModel st) .
     showString ", vars = " .
-    showsPrec 0 (length (lsVars st)) .
+    showsPrec 0 (sum (map length (Map.elems (lsVars st)))) .
     showString "}"
 
 -- | Create the initial lockstep state from a model value.
@@ -93,7 +95,7 @@ initialLockstepState m = LockstepState
   { lsModel     = m
   , lsNextVarId = 0
   , lsEntries   = ModelEnv Map.empty
-  , lsVars      = []
+  , lsVars      = Map.empty
   , lsLastEntry = Nothing
   }
 
@@ -114,17 +116,23 @@ getNextVarId = lsNextVarId
 getLastEntry :: LockstepState model v -> Maybe Dynamic
 getLastEntry = lsLastEntry
 
--- | Enumerate all variables of a given type.
+-- | Enumerate all variables of a given type. @O(log n)@ in the number
+-- of distinct types ever inserted, plus @O(k)@ in the number of
+-- matching variables.
+--
 -- Useful in generators to pick a variable for a
 -- t'Hedgehog.Lockstep.GVar.GVar'.
 varsOfType
   :: forall a model. Typeable a
   => LockstepState model Symbolic -> [Var a Symbolic]
 varsOfType st =
-  [ var
-  | SomeVar (var :: Var b Symbolic) <- lsVars st
-  , Just Refl <- [eqT @a @b]
-  ]
+  case Map.lookup (typeRep (Proxy @a)) (lsVars st) of
+    Nothing     -> []
+    Just bucket ->
+      [ var
+      | SomeVar (var :: Var b Symbolic) <- bucket
+      , Just Refl <- [eqT @a @b]
+      ]
 {-# INLINABLE varsOfType #-}
 
 -- | Look up a model result by t'Hedgehog.Internal.State.Var' identity.
@@ -138,16 +146,18 @@ lookupModelEntry var (ModelEnv m) = Map.lookup (VarKey var) m
 -- | Insert a model result into the state and register the variable.
 -- Used internally by 'Hedgehog.Lockstep.Command.toLockstepCommand'.
 insertModelResult
-  :: (Typeable modelOutput, Typeable output, Ord output, Ord1 v)
+  :: forall modelOutput output model v.
+     (Typeable modelOutput, Typeable output, Ord output, Ord1 v)
   => Var output v -> modelOutput -> LockstepState model v -> LockstepState model v
 insertModelResult var modelOut st =
   let varId = lsNextVarId st
       dyn   = toDyn modelOut
+      tyRep = typeRep (Proxy @output)
       ModelEnv entries = lsEntries st
   in st
     { lsNextVarId = varId + 1
     , lsEntries   = ModelEnv (Map.insert (VarKey var) dyn entries)
-    , lsVars      = SomeVar var : lsVars st
+    , lsVars      = Map.insertWith (++) tyRep [SomeVar var] (lsVars st)
     , lsLastEntry = Just dyn
     }
 {-# INLINABLE insertModelResult #-}
