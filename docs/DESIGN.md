@@ -1,5 +1,10 @@
 # Reimagining `quickcheck-lockstep` with Hedgehog
 
+This document has two parts. Sections 1 and 2 give the background: what
+`quickcheck-lockstep` is, how Hedgehog differs, and why a port is interesting.
+Sections 3 and 4 describe what `hedgehog-lockstep` actually ships today.
+Section 5 lists ideas that were explored but deliberately deferred.
+
 ## 1. What `quickcheck-lockstep` Is and How It Works
 
 ### Core Philosophy
@@ -39,9 +44,9 @@ The "lockstep" part means: at every step, the model and the system must agree on
 
 ### Key Type Classes and Data Types
 
-**`InLockstep state`** — the central class users implement:
-- `data ModelValue state a` — GADT mapping real types to model types (e.g., `IO.Handle → MHandle`)
-- `data Observable state a` — what we can actually compare (handles become unobservable)
+**`InLockstep state`** is the central class users implement:
+- `data ModelValue state a`: GADT mapping real types to model types (e.g., `IO.Handle → MHandle`)
+- `data Observable state a`: what we can actually compare (handles become unobservable)
 - `observeModel :: ModelValue state a → Observable state a`
 - `modelNextState :: action → lookUp → state → (ModelValue state a, state)`
 - `usedVars :: action → [AnyGVar (ModelOp state)]`
@@ -49,17 +54,17 @@ The "lockstep" part means: at every step, the model and the system must agree on
 - `shrinkWithVars :: ModelFindVariables state → state → action → [Any action]`
 - `tagStep :: (state, state) → action → ModelValue state a → [String]`
 
-**`RunLockstep state m`** — subclass for execution:
+**`RunLockstep state m`** is the subclass for execution:
 - `observeReal :: Proxy m → action → Realized m a → Observable state a`
 
-**`GVar op f`** — generalized variables with a Functor-like structure:
+**`GVar op f`** is a generalized variable with a Functor-like structure:
 ```haskell
 data GVar op f where
   GVar :: Typeable x => Var x -> op x y -> GVar op y
 ```
 This solves the critical problem that `quickcheck-dynamic` gives exactly **one variable per action**. If `Open` returns `Either Err (Handle, FilePath)`, you need to extract just the `Handle` for a subsequent `Close`. The `Op` DSL (`OpFst`, `OpSnd`, `OpLeft`, `OpRight`, `OpComp`) lets you "map" over variables.
 
-**`Lockstep state`** — opaque wrapper holding the model state + model-side variable environment:
+**`Lockstep state`** is an opaque wrapper holding the model state plus a model-side variable environment:
 ```haskell
 data Lockstep state = Lockstep {
     lockstepModel :: state,
@@ -78,11 +83,11 @@ data Lockstep state = Lockstep {
 
 ### Pain Points in the Current Design
 
-1. **Three-layer dependency**: Users must understand quickcheck-lockstep, quickcheck-dynamic, AND QuickCheck.
-2. **Boilerplate**: `ModelValue`, `Observable`, `observeModel`, `observeReal`, `usedVars`, `InterpretOp` instances — all required per test.
+1. **Three-layer dependency**: users must understand quickcheck-lockstep, quickcheck-dynamic, AND QuickCheck.
+2. **Boilerplate**: `ModelValue`, `Observable`, `observeModel`, `observeReal`, `usedVars`, `InterpretOp` instances, all required per test.
 3. **Manual shrinking**: QuickCheck's approach requires `shrinkWithVars`. If you forget, no shrinking happens.
-4. **Single variable per action**: The `GVar`/`Op` machinery is clever but adds conceptual overhead. Users must understand Coyoneda-like structures to write tests.
-5. **`Realized` type family**: Confusing for newcomers; it's essentially `a` for `IO`-based tests.
+4. **Single variable per action**: the `GVar`/`Op` machinery is clever but adds conceptual overhead. Users must understand Coyoneda-like structures to write tests.
+5. **`Realized` type family**: confusing for newcomers; it's essentially `a` for `IO`-based tests.
 6. **No parallel testing**: `quickcheck-dynamic` lacks parallel execution (unlike `quickcheck-state-machine` or Hedgehog).
 7. **Labelling is re-execution**: `tagActions` must re-run the entire model because `Actions` doesn't record responses (unlike `Commands` in qsm).
 
@@ -111,344 +116,272 @@ data Callback input output state
   | Ensure (state Concrete → state Concrete → input Concrete → output → Test ())
 ```
 
-Each command is a self-contained record. There's no single GADT — commands are a *list* of `Command` values.
+Each command is a self-contained record. There's no single GADT; commands are a *list* of `Command` values.
 
 ### Integrated Shrinking
 Hedgehog uses tree-based generators where shrink candidates are embedded in the generation tree. No separate `shrink` function is needed. This is a major ergonomic win.
 
-### HTraversable
-Hedgehog requires `HTraversable` instances for input types to substitute `Symbolic` → `Concrete` variables. This is the Hedgehog counterpart to lockstep's `usedVars`.
+### HTraversable / TraversableB
+Hedgehog requires a traversable instance for input types to substitute `Symbolic`-phase variables with `Concrete` ones. This is Hedgehog's counterpart to lockstep's `usedVars`. `hedgehog-lockstep` uses barbies' `FunctorB` and `TraversableB` to satisfy this in a way that composes with GVars.
 
 ### Parallel Testing
-Hedgehog has `executeParallel` for linearizability testing — something neither `quickcheck-dynamic` nor `quickcheck-lockstep` currently provides.
+Hedgehog has `executeParallel` for linearizability testing, something neither `quickcheck-dynamic` nor `quickcheck-lockstep` currently provides.
 
 ---
 
-## 3. Designing `hedgehog-lockstep`
+## 3. What `hedgehog-lockstep` Actually Ships
 
-### Design Goals
+The implementation is deliberately narrow: a single `LockstepCmd` record that
+wraps a Hedgehog `Command`, plus enough machinery to store model-side results
+in the state and project values out of compound return types.
 
-1. **Preserve the lockstep philosophy**: model + system agree on responses up to observability.
+### 3.1 Design Goals
+
+1. **Preserve the lockstep philosophy**: model and system must agree on responses up to observability.
 2. **Leverage integrated shrinking**: eliminate `shrinkWithVars` entirely.
 3. **Reduce boilerplate**: fewer associated types, less manual wiring.
 4. **Support parallel testing**: inherit Hedgehog's `executeParallel`.
 5. **Keep the `GVar` insight**: allow projections from composite return types.
-6. **Improve tagging**: make it less costly than full model re-execution.
 
-### Core Design
-
-#### 3.1 The Model Value / Observable Problem
-
-The `ModelValue` / `Observable` split exists because:
-- The model may return a different type (mock handle vs real handle)
-- Comparison needs a common type
-
-In Hedgehog, we can simplify this. Since `Var output v` is already parameterised, we can track the mapping between real and model types at the *variable* level rather than through a separate GADT.
-
-**Proposal**: Replace `ModelValue` + `Observable` with a single `ModelResult` type family and an `Observe` class:
+### 3.2 The `LockstepCmd` record
 
 ```haskell
--- What the model returns for a given real return type
-type family ModelResult state a
-
--- How to compare real and model results
-class Observe state a where
-  observe :: a -> ModelResult state a -> Maybe String
-  -- Nothing = match, Just msg = mismatch description
-```
-
-For the handle case:
-```haskell
-type instance ModelResult FsState IO.Handle = MHandle
-type instance ModelResult FsState String    = String
-type instance ModelResult FsState ()        = ()
-
-instance Observe FsState IO.Handle where
-  observe _ _ = Nothing  -- handles are unobservable
-
-instance Observe FsState String where
-  observe real model
-    | real == model = Nothing
-    | otherwise     = Just $ show real ++ " /= " ++ show model
-```
-
-This eliminates the GADT boilerplate of `ModelValue`, `Observable`, `observeModel`, and `observeReal`.
-
-#### 3.2 Rethinking Variables: `GVar` in Hedgehog's World
-
-Hedgehog's `Var a v` is parameterised by the phase functor `v`. The `GVar` problem (extracting a component from a compound return type) still exists.
-
-**Option A: Encode projections in the state**
-
-Instead of `GVar`, store projected model values directly in the state during the `Update` callback:
-
-```haskell
-data FsState v = FsState {
-    mockFs      :: Mock,
-    openHandles :: Map (Var (Either Err (IO.Handle, File)) v)
-                       MHandle,  -- model handle stored on success
-    stats       :: Stats
+data LockstepCmd m model = forall input output modelOutput.
+  ( TraversableB input, Show (input Symbolic)
+  , Show output, Typeable output, Ord output
+  , Typeable modelOutput, Eq modelOutput, Show modelOutput
+  ) => LockstepCmd
+  { lsCmdGen     :: LockstepState model Symbolic -> Maybe (Gen (input Symbolic))
+  , lsCmdExec    :: input Concrete -> m output
+  , lsCmdModel   :: forall v. Ord1 v =>
+                    LockstepState model v -> input v -> (modelOutput, model)
+  , lsCmdRequire :: model -> input Symbolic -> Bool
+  , lsCmdObserve :: modelOutput -> output -> Test ()
   }
 ```
 
-When `Open` succeeds, the `Update` callback stores the model handle. When `Close` needs a handle, it looks up the original `Var` in the map and retrieves the associated `MHandle`.
+The library converts each `LockstepCmd` into a Hedgehog `Command` by wiring:
 
-This is simpler than `GVar` but means the state carries more information.
+- **Require**: `lsCmdRequire` plus Hedgehog's automatic variable-definedness check.
+- **Update**: run `lsCmdModel` to advance the model, then store the model-side
+  result in `LockstepState` keyed by the Hedgehog `Var`.
+- **Ensure**: retrieve the stored model result and compare it with the real
+  output via `lsCmdObserve`.
 
-**Option B: A Hedgehog-native `GVar`** (CHOSEN)
+This is simpler than the `InLockstep` typeclass stack in quickcheck-lockstep:
+there's no `ModelValue` GADT, no `Observable` GADT, no `observeModel`/
+`observeReal` pair, and no associated type families. The comparison between
+model and real is expressed directly by the user in `lsCmdObserve`, using
+Hedgehog assertions. Hedgehog's diff infrastructure handles pretty-printing.
 
-Define a generalized variable that works with Hedgehog's `Symbolic`/`Concrete` split:
+The cost of this directness is that `hedgehog-lockstep` does not automatically
+know how model and real types relate. The user expresses that relationship
+inside `lsCmdModel` (by constructing `modelOutput`) and `lsCmdObserve` (by
+deciding how to compare). For most cases this is straightforward and shorter
+than the GADT-based alternative.
+
+### 3.3 Model Environment and `LockstepState`
+
+```haskell
+data LockstepState model v = LockstepState
+  { lsModel     :: !model
+  , lsNextVarId :: !Int
+  , lsEntries   :: ![ModelEntry v]
+  , lsVars      :: ![SomeVar v]
+  }
+```
+
+`lsEntries` is the lockstep environment: each `ModelEntry v` pairs a Hedgehog
+`Var` with the model-side result (stored as `Dynamic`). `lsVars` is a parallel
+list used by `varsOfType` to enumerate available variables during generation.
+
+The environment supports both phases:
+
+- In the **Symbolic** phase, variable comparison is by Hedgehog's stable name
+  (unchanged by shrinking).
+- In the **Concrete** phase, comparison is by value.
+
+Both cases are unified through `Ord1` on the phase functor `v`.
+
+### 3.4 `GVar` and `Op`: Projections from Compound Results
+
+When a command returns a compound type like `Either String (Handle, Name)`,
+a later command may need just the `Handle`. `GVar` and `Op` handle this:
 
 ```haskell
 data GVar a v where
-  GVar :: Typeable x => Var x v -> (x -> Maybe a) -> GVar a v
+  GVar :: (Typeable x, Ord x)
+       => !(Var x v) -> !String -> !(Dynamic -> Maybe a) -> GVar a v
 
--- For generation (Symbolic phase), we only need the Var identity
--- For execution (Concrete phase), we apply the projection
-resolveGVar :: GVar a Concrete -> Maybe a
-resolveGVar (GVar (Concrete x) f) = f x
+data Op a b where
+  OpId    :: Op a a
+  OpFst   :: Op (a, b) a
+  OpSnd   :: Op (a, b) b
+  OpLeft  :: Op (Either a b) a
+  OpRight :: Op (Either a b) b
+  OpComp  :: !(Op b c) -> !(Op a b) -> Op a c
 ```
 
-The problem: `GVar a Symbolic` can't apply `f` because there's no value yet. But this is fine — during generation we only need the variable's identity (for `Require` checks), and during execution we resolve it.
+`GVar` bundles:
 
-To make `GVar` work with `HTraversable`, we'd need:
-```haskell
-instance HTraversable (GVar a) where
-  htraverse f (GVar var proj) = GVar <$> htraverse f var <*> pure proj
-```
+1. the underlying Hedgehog `Var`, so the framework can track which variables
+   the input references and keep them defined during shrinking;
+2. a human-readable label for debugging; and
+3. a resolution closure that projects a value out of the `Dynamic` model
+   result.
 
-Wait — `Var` is already `HTraversable` in hedgehog, so this composes naturally.
+`Op`-based projections are partial: applying `OpLeft` to a `Right` returns
+`Nothing`. That's exactly the behaviour callers need when a `GVar` is
+generated against a symbolic variable whose concrete outcome turns out to not
+match the projection.
 
-We should **also** provide the `Op` DSL for `Show`/`Eq` on projections:
-```haskell
-data GVar' op a v where
-  GVar' :: Typeable x => Var x v -> op x a -> GVar' op a v
-```
+The original design considered storing projected model values directly in
+`LockstepState` (Option A in an earlier draft). The `GVar`-based Option B was
+chosen because it keeps the state type small and mirrors the
+`quickcheck-lockstep` API, minimising the conceptual shift for users moving
+over.
 
-This way projections are inspectable (for debugging/showing test cases).
+### 3.5 Eliminating Manual Shrinking
 
-#### 3.3 The Lockstep Command
+This is the biggest ergonomic win. With Hedgehog:
 
-Instead of having users write bare Hedgehog `Command`s, we provide a higher-level interface:
+- Action *argument* shrinking is integrated (strings shrink, ints shrink, etc.).
+- Action *sequence* shrinking is handled by Hedgehog's `Gen.sequential` and
+  `Gen.parallel` combinators.
+- `shrinkWithVars` is gone entirely.
 
-```haskell
-data LockstepCmd gen m state = forall input output.
-  (Show (input Symbolic), Typeable output, Observe state output) =>
-  LockstepCmd {
-    -- Generate an action given the model state
-    lsCmdGen :: state Symbolic -> Maybe (gen (input Symbolic)),
+The model environment (`lsEntries`) is keyed by `Var` identity, so after
+shrinking removes a command, the remaining `GVar`s still resolve correctly
+against the updated environment. No user code changes when Hedgehog shrinks.
 
-    -- Run against the real system
-    lsCmdExec :: input Concrete -> m output,
+### 3.6 Parallel Testing
 
-    -- Run against the model (pure)
-    lsCmdModel :: state Symbolic -> input Symbolic
-               -> (ModelResult state output, state Symbolic),
-
-    -- Additional preconditions beyond variable-definedness
-    lsCmdRequire :: state Symbolic -> input Symbolic -> Bool,
-
-    -- Tag this step for labelling
-    lsCmdTag :: state Symbolic -> input Symbolic
-             -> ModelResult state output -> [String]
-  }
-```
-
-The library then converts each `LockstepCmd` into a Hedgehog `Command` by:
-1. **Require**: Check `lsCmdRequire` + all variables in input are defined
-2. **Update**: Run `lsCmdModel` to step the model state, store result
-3. **Ensure**: Compare `output` with `ModelResult state output` via `Observe`
-
-#### 3.4 Eliminating Manual Shrinking
-
-This is the biggest win. With Hedgehog:
-- Action *argument* shrinking is integrated (strings shrink, ints shrink, etc.)
-- Action *sequence* shrinking is handled by Hedgehog's `sequential`/`parallel` combinators
-- **No `shrinkWithVars` needed**
-
-The generator in `lsCmdGen` uses Hedgehog's `Gen` which carries its own shrink tree. When we pick variables from the state, we can use `Gen.element` which also shrinks (tries different available variables).
-
-#### 3.5 Parallel Testing
-
-With the `Command`-based architecture, `executeParallel` comes for free:
+`lockstepParallel` wraps Hedgehog's `executeParallel`:
 
 ```haskell
-prop_fsParallel :: Property
-prop_fsParallel = property $ do
-  actions <- forAll $
-    Gen.parallel (Range.linear 1 50) (Range.linear 1 10)
-      initialState lockstepCommands
-  executeParallel initialState actions
+lockstepParallel
+  :: Show model
+  => model -> Int -> Int
+  -> [LockstepCmd (PropertyT IO) model]
+  -> Property
 ```
 
-This enables linearizability testing — checking that concurrent executions are equivalent to *some* sequential ordering. This is a capability lockstep-style testing can greatly benefit from.
+For tests that need an IO resource (the common case),
+`lockstepParallelWith` takes a setup plus a reset callback, mirroring
+`lockstepPropertyWith`. Reset is important here because Hedgehog retries
+parallel runs to distinguish genuine non-linearisability from scheduling
+flakiness, and each retry must start from a fresh resource state.
 
-#### 3.6 Improved Tagging
-
-**Problem**: In `quickcheck-lockstep`, `tagActions` must re-execute the entire model to produce tags, because `Actions` doesn't store responses.
-
-**Solution**: In our design, the `Update` callback stores model results in the state. After execution, we have the full history of `(state, input, modelResult)` triples. We can tag from this history directly.
-
-```haskell
-tagHistory :: [(state Concrete, SomeInput Concrete, SomeModelResult)] -> [String]
-```
-
-Even better: Hedgehog's `Ensure` callback sees `(oldState, newState, input, output)` — we can emit tags during execution and collect them, avoiding re-execution entirely.
+This enables linearizability testing: checking that concurrent executions are
+equivalent to *some* sequential ordering. `quickcheck-lockstep` does not
+provide this.
 
 ---
 
-## 4. Proposed API Surface
+## 4. Actual API Surface
 
 ```haskell
-module Hedgehog.Lockstep (
-    -- Core type families
-    ModelResult,
-    Observe(..),
+module Hedgehog.Lockstep
+  ( -- Commands
+    LockstepCmd (..)
+  , toLockstepCommand
+  , lockstepCommands
 
-    -- Variable projections
-    GVar(..),
-    Op(..),
-    mapGVar,
+    -- State
+  , LockstepState (..)
+  , ModelEntry (..)
+  , initialLockstepState
+  , getModel
+  , getEntries
+  , varsOfType
 
-    -- Command construction
-    LockstepCmd(..),
-    toLockstepCommand,    -- LockstepCmd → Hedgehog Command
+    -- Generalized variables
+  , GVar (..)
+  , mkGVar
+  , mkGVarId
+  , resolveGVar
+  , concreteGVar
+  , gvarLabel
 
-    -- State wrapper
-    LockstepState(..),
-    initialLockstepState,
-    getModelState,
+    -- Structural projections
+  , Op (..)
+  , applyOp
+  , (>>>)
 
     -- Running tests
-    lockstepProperty,     -- sequential
-    lockstepParallel,     -- parallel linearizability
+  , lockstepProperty
+  , lockstepPropertyWith
+  , lockstepParallel
+  , lockstepParallelWith
 
-    -- Tagging
-    lockstepLabelledExamples,
-
-    -- Re-exports
-    module Hedgehog,
-  ) where
+    -- Re-exports from Hedgehog and barbies
+  , Var (..), Symbolic, Concrete
+  , Gen, Test, Property, PropertyT, (===)
+  , FunctorB (..), TraversableB (..)
+  )
 ```
 
-### Example: File System Test
-
-```haskell
-type instance ModelResult FsState IO.Handle = MHandle
-type instance ModelResult FsState (Either Err a) = Either Err (ModelResult FsState a)
--- etc.
-
-data OpenInput v = OpenInput File
-  deriving (Show)
-instance HTraversable OpenInput where htraverse _ (OpenInput f) = pure (OpenInput f)
-
-data WriteInput v = WriteInput (GVar' Op IO.Handle v) String
-  deriving (Show)
-instance HTraversable WriteInput where
-  htraverse f (WriteInput (GVar' v op) s) =
-    (\v' -> WriteInput (GVar' v' op) s) <$> htraverse f v
-
-cmdOpen :: LockstepCmd Gen (ReaderT FilePath IO) FsState
-cmdOpen = LockstepCmd {
-    lsCmdGen = \st -> Just $ OpenInput <$> genFile st,
-    lsCmdExec = \(OpenInput f) -> liftIO $ tryOpen f,
-    lsCmdModel = \st (OpenInput f) ->
-      let (result, mock') = Mock.mOpen f (mockFs st)
-      in (bimap id (\(h,fp) -> (h, fp)) result, st { mockFs = mock' }),
-    lsCmdRequire = \_ _ -> True,
-    lsCmdTag = \st (OpenInput _) result ->
-      [show OpenTwo | Set.size (openedFiles st) >= 2]
-  }
-```
+There is no `Observe` class, no `ModelResult` type family, no `lsCmdTag`, and
+no `lockstepLabelledExamples`. Sections 1-2 describe the shape those would
+have taken; section 5 explains why they were deferred.
 
 ---
 
-## 5. Improvements Beyond a Direct Port
+## 5. Ideas Explored but Deferred
 
-### 5.1 Type-Level Observability
+The items below were considered during design. Each was dropped or postponed
+because the simpler API already handles the common case, or because the
+feature needs real-world use to guide its shape.
 
-Instead of runtime `Observable` GADTs, use a type class with a default:
+### 5.1 `ModelResult` type family and `Observe` class
 
-```haskell
-class Observe state a where
-  type Observed state a :: Type
-  type Observed state a = a  -- default: same type, fully observable
-
-  observeReal  :: a -> Observed state a
-  default observeReal :: (a ~ Observed state a) => a -> Observed state a
-  observeReal = id
-
-  observeModel :: ModelResult state a -> Observed state a
-
--- For handles: override
-instance Observe FsState IO.Handle where
-  type Observed FsState IO.Handle = ()  -- unobservable
-  observeReal  _ = ()
-  observeModel _ = ()
-
--- For strings: use default
-instance Observe FsState String  -- nothing to write!
-```
-
-This eliminates most of the boilerplate. Only types with model/real mismatches need instances.
+The earlier draft proposed a type family `ModelResult state a` and a class
+`Observe state a` to automate the model-to-real comparison. The shipped API
+instead uses a per-command `lsCmdObserve` written in direct Hedgehog
+assertion style. In practice the per-command observer is only a few lines
+and side-steps the orphan-instance and coverage-of-types issues that a class
+based design runs into. A typeclass-based variant is still a reasonable
+future direction once there's enough real-world usage to see which comparison
+patterns recur.
 
 ### 5.2 Automatic `usedVars` via `HTraversable`
 
-Hedgehog already requires `HTraversable` for inputs. This serves the same purpose as `usedVars` — it identifies which variables an action references. The library can extract variables automatically from the traversal, eliminating the manual `usedVars` definition.
+Hedgehog already traverses inputs to substitute symbolic variables with
+concrete ones. `hedgehog-lockstep` relies on the user's
+`FunctorB`/`TraversableB` instances for that, which is the same information
+`usedVars` would encode. No separate API surface is needed, so this "feature"
+is really a property of the design rather than additional code.
 
-### 5.3 Better Error Messages
+### 5.3 Tagging and labelled examples
 
-Lockstep currently shows:
-```
-System under test returned: OEither (Left (OId AlreadyExists))
-but model returned:         OEither (Left (OId DoesNotExist))
-```
+The design discussed `lsCmdTag`, a per-command classifier that could collect
+labels during execution rather than by re-running the model as
+`quickcheck-lockstep` does. This was not implemented. Hedgehog's `classify`
+and `label` can be called inside `lsCmdObserve` today, which covers most use
+cases; a dedicated tagging surface can be added if and when users need more.
 
-With Hedgehog's diff infrastructure, we can show:
-```
-━━━ Postcondition failed ━━━
-MkDir (Dir ["x"])
+### 5.4 Compositional commands
 
-  Expected (from model): Left DoesNotExist
-  Got (from system):     Left AlreadyExists
-                               ^^^^^^^^^^^
-```
+`combineCommands :: [LockstepCmd m stateA] -> [LockstepCmd m stateB]
+                -> [LockstepCmd m (stateA, stateB)]` would let two subsystems
+share a backend. The mechanical implementation is straightforward but the
+`Ord1` and `Typeable` plumbing across the combined state deserves more
+thought than v0.1 warranted.
 
-### 5.4 Compositional Commands
+### 5.5 Extra per-command `Ensure` callbacks
 
-Allow combining lockstep commands from different subsystems:
+Users could attach assertions beyond the lockstep postcondition ("after every
+Write, the file size is positive"). This can be approximated today inside
+`lsCmdObserve`. A dedicated field would make it clearer but is not
+essential.
 
-```haskell
-combineCommands :: [LockstepCmd gen m stateA]
-                -> [LockstepCmd gen m stateB]
-                -> [LockstepCmd gen m (stateA, stateB)]
-```
+### 5.6 `falsify` as an alternative foundation
 
-This would allow testing interactions between two subsystems that share a backend.
-
-### 5.5 Property-Level Assertions Beyond Lockstep
-
-The pure lockstep postcondition (model == system) is powerful but sometimes you want *additional* assertions. Allow users to attach extra `Ensure` callbacks:
-
-```haskell
-data LockstepCmd gen m state = ... | LockstepCmd {
-    ...,
-    lsCmdEnsureExtra :: state Concrete -> state Concrete
-                     -> input Concrete -> output -> Test ()
-  }
-```
-
-For example: "after every Write, the file size in the model is positive."
-
-### 5.6 Consider `falsify` Instead of Hedgehog
-
-Edsko himself developed `falsify`, a library with **internal shrinking** that works across monadic bind (unlike Hedgehog's integrated shrinking). If we're rebuilding from scratch, `falsify` might be the better foundation:
-
-- **Internal shrinking** means shrinking works correctly even when later generators depend on earlier results — critical for stateful testing where the generator for step N depends on the model state after step N-1.
-- Hedgehog's integrated shrinking breaks down with `>>=` (it can't shrink the left side of a bind independently from the right).
-- For stateful testing specifically, this matters when an action's arguments are generated based on the current model state.
-
-However, `falsify` is newer, less battle-tested, and lacks Hedgehog's `executeParallel`. A pragmatic choice would be Hedgehog now (for ecosystem and parallel testing) with an eye toward `falsify` later.
+`falsify` (also by Edsko de Vries) has internal shrinking that works cleanly
+across monadic bind, which is a better theoretical fit for stateful testing
+than Hedgehog's integrated shrinking. Hedgehog was chosen for v0.1 because it
+has a mature `executeParallel` and a larger ecosystem. A `falsify-lockstep`
+peer would be interesting future work.
 
 ---
 
@@ -457,12 +390,11 @@ However, `falsify` is newer, less battle-tested, and lacks Hedgehog's `executePa
 | Aspect | quickcheck-lockstep | hedgehog-lockstep |
 |--------|-------------------|-------------------|
 | **Shrinking** | Manual (`shrinkWithVars`) | Integrated (free) |
-| **Variables** | `GVar` with `Op` DSL | `GVar'` adapted for `Symbolic`/`Concrete` |
-| **Model values** | `ModelValue` GADT | `ModelResult` type family + `Observe` class |
-| **Observability** | `Observable` GADT + `observeModel`/`observeReal` | `Observed` associated type with defaults |
-| **Variable tracking** | Manual `usedVars` | Automatic via `HTraversable` |
+| **Variables** | `GVar` with `Op` DSL | `GVar` adapted for `Symbolic`/`Concrete` |
+| **Model / real divergence** | `ModelValue`/`Observable` GADTs plus `observeModel`/`observeReal` | `modelOutput` existential plus per-command `lsCmdObserve` |
+| **Variable tracking** | Manual `usedVars` | Automatic via `TraversableB` |
 | **Parallel testing** | Not supported | Supported via `executeParallel` |
-| **Tagging** | Requires model re-execution | Can tag during execution |
+| **Tagging** | Requires model re-execution | Use Hedgehog `classify` / `label` in observer |
 | **Error messages** | Custom `Show` for `Observable` | Hedgehog's diff infrastructure |
 | **Dependency stack** | QC + qc-dynamic + qc-lockstep | Hedgehog + hedgehog-lockstep |
 | **Command structure** | Single GADT + typeclass | List of `Command` records |
@@ -470,13 +402,13 @@ However, `falsify` is newer, less battle-tested, and lacks Hedgehog's `executePa
 ### What's Lost
 
 - **Dynamic logic**: `quickcheck-dynamic` supports DL specifications; Hedgehog does not.
-- **Single GADT elegance**: The single `Action` GADT in lockstep is arguably more elegant than a list of `Command` records. Pattern matching on a closed GADT gives exhaustiveness checking.
+- **Single GADT elegance**: the single `Action` GADT in lockstep is arguably more elegant than a list of `Command` records. Pattern matching on a closed GADT gives exhaustiveness checking.
 - **`labelledExamples`**: QuickCheck has this; Hedgehog doesn't have a direct equivalent (though we can approximate with classification).
 
 ### What's Gained
 
-- **No manual shrinking**: The single biggest ergonomic improvement.
-- **Parallel testing**: Linearizability checking for free.
-- **Less boilerplate**: ~40% less code per test through defaults and `HTraversable`.
+- **No manual shrinking**: the single biggest ergonomic improvement.
+- **Parallel testing**: linearizability checking for free.
+- **Less boilerplate**: fewer associated types, no `ModelValue`/`Observable` GADTs.
 - **Better error output**: Hedgehog's pretty-printing and diff support.
-- **Simpler mental model**: Two layers instead of three.
+- **Simpler mental model**: two layers instead of three.

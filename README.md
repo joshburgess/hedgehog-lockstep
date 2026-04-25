@@ -129,17 +129,20 @@ Partial projections (`OpLeft`, `OpRight`) return `Nothing` on mismatch.
 
 ```haskell
 -- Sequential (most common)
-lockstepProperty    :: model -> Int -> [LockstepCmd (PropertyT IO) model] -> Property
+lockstepProperty     :: model -> Int -> [LockstepCmd (PropertyT IO) model] -> Property
 lockstepPropertyWith :: model -> Int -> IO env -> (env -> IO ()) -> (env -> [LockstepCmd ...]) -> Property
 
 -- Parallel (linearizability)
-lockstepParallel :: model -> Int -> Int -> [LockstepCmd (PropertyT IO) model] -> Property
+lockstepParallel     :: model -> Int -> Int -> [LockstepCmd (PropertyT IO) model] -> Property
+lockstepParallelWith :: model -> Int -> Int -> IO env -> (env -> IO ()) -> (env -> [LockstepCmd ...]) -> Property
 
 -- Manual (use Gen.sequential / executeSequential directly)
 lockstepCommands :: [LockstepCmd m model] -> [Command Gen m (LockstepState model)]
 ```
 
-Use `lockstepPropertyWith` when commands need IO resources (e.g., `IORef`, database connections). The reset callback runs before each execution attempt, including during shrinking.
+Use the `*With` variants when commands need IO resources (e.g., `IORef`, database connections). The reset callback runs before each execution attempt, including during shrinking.
+
+Parallel operations must be thread-safe: use `atomicModifyIORef'`, `MVar`, or `TVar` rather than `modifyIORef'`.
 
 ## Building
 
