@@ -38,6 +38,7 @@ applyOp OpLeft (Right _) = Nothing
 applyOp OpRight (Left _) = Nothing
 applyOp OpRight (Right b) = Just b
 applyOp (OpComp f g) x = applyOp g x >>= applyOp f
+{-# INLINABLE applyOp #-}
 
 -- | Left-to-right composition of 'Op's.
 (>>>) :: Op a b -> Op b c -> Op a c

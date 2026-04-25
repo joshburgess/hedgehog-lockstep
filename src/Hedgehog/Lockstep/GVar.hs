@@ -60,6 +60,7 @@ mkGVar
 mkGVar var op =
   GVar var (showOp op) $ \dyn ->
     fromDynamic dyn >>= applyOp op
+{-# INLINABLE mkGVar #-}
 
 -- | Construct a t'GVar' with an identity projection. Use when the
 -- entire model output is the desired value.
@@ -68,6 +69,7 @@ mkGVarId
   => Var realX v -> GVar a v
 mkGVarId var =
   GVar var "id" fromDynamic
+{-# INLINABLE mkGVarId #-}
 
 -- | Resolve a t'GVar' against a model environment.
 -- Uses 'Ord1' for phase-polymorphic t'Hedgehog.Internal.State.Var'
@@ -75,6 +77,7 @@ mkGVarId var =
 resolveGVar :: Ord1 v => GVar a v -> [ModelEntry v] -> Maybe a
 resolveGVar (GVar var _ resolve) entries =
   lookupModelEntry var entries >>= resolve
+{-# INLINABLE resolveGVar #-}
 
 -- | Extract the projected value from a t'GVar' in the t'Hedgehog.Internal.State.Concrete' phase.
 --
@@ -83,6 +86,7 @@ resolveGVar (GVar var _ resolve) entries =
 -- (e.g., both are @Either String (Int, String)@).
 concreteGVar :: GVar a Concrete -> Maybe a
 concreteGVar (GVar (Var (Concrete x)) _ resolve) = resolve (toDyn x)
+{-# INLINABLE concreteGVar #-}
 
 -- | Get the human-readable label of a t'GVar'.
 gvarLabel :: GVar a v -> String

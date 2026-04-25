@@ -99,6 +99,7 @@ data LockstepCmd m model = forall input output modelOutput.
 toLockstepCommand
   :: (Monad m)
   => LockstepCmd m model -> Command Gen m (LockstepState model)
+{-# INLINABLE toLockstepCommand #-}
 toLockstepCommand (LockstepCmd{..}) = Command gen exec callbacks
   where
     gen st = lsCmdGen st

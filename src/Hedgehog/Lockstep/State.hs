@@ -90,6 +90,7 @@ varsOfType st =
   | SomeVar (var :: Var b Symbolic) <- lsVars st
   , Just Refl <- [eqT @a @b]
   ]
+{-# INLINABLE varsOfType #-}
 
 -- | Look up a model result by matching the
 -- t'Hedgehog.Internal.State.Var' identity.
@@ -111,6 +112,7 @@ lookupModelEntry var entries = go entries
 
     varEq :: Var x v -> Var x v -> Bool
     varEq (Var v1) (Var v2) = liftCompare compare v1 v2 == EQ
+{-# INLINABLE lookupModelEntry #-}
 
 -- | Insert a model result into the state and register the variable.
 -- Used internally by 'Hedgehog.Lockstep.Command.toLockstepCommand'.
@@ -124,3 +126,4 @@ insertModelResult var modelOut st =
     , lsEntries   = ModelEntry var (toDyn modelOut) : lsEntries st
     , lsVars      = SomeVar var : lsVars st
     }
+{-# INLINABLE insertModelResult #-}

@@ -37,6 +37,7 @@ lockstepCommands
   :: (Monad m)
   => [LockstepCmd m model] -> [Command Gen m (LockstepState model)]
 lockstepCommands = map toLockstepCommand
+{-# INLINABLE lockstepCommands #-}
 
 -- | Run a sequential lockstep property test (pure commands).
 --
@@ -53,6 +54,7 @@ lockstepProperty model0 maxActions cmds = property $ do
   actions <- forAll $
     Gen.sequential (Range.linear 1 maxActions) (initialLockstepState model0) commands
   executeSequential (initialLockstepState model0) actions
+{-# INLINABLE lockstepProperty #-}
 
 -- | Run a sequential lockstep property test with IO-based resource setup.
 --
@@ -78,6 +80,7 @@ lockstepPropertyWith model0 maxActions setup reset mkCmds = property $ do
     Gen.sequential (Range.linear 1 maxActions) (initialLockstepState model0) commands
   evalIO (reset env)
   executeSequential (initialLockstepState model0) actions
+{-# INLINABLE lockstepPropertyWith #-}
 
 -- | Run a parallel lockstep property test for linearizability.
 --
@@ -99,6 +102,7 @@ lockstepParallel model0 maxPrefix maxBranch cmds = property $ do
     Gen.parallel (Range.linear 1 maxPrefix) (Range.linear 1 maxBranch)
       (initialLockstepState model0) commands
   executeParallel (initialLockstepState model0) actions
+{-# INLINABLE lockstepParallel #-}
 
 -- | Run a parallel lockstep property test with IO-based resource setup.
 --
@@ -132,3 +136,4 @@ lockstepParallelWith model0 maxPrefix maxBranch setup reset mkCmds = property $ 
       (initialLockstepState model0) commands
   evalIO (reset env)
   executeParallel (initialLockstepState model0) actions
+{-# INLINABLE lockstepParallelWith #-}
