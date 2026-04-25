@@ -34,6 +34,7 @@ module Hedgehog.Lockstep
   , GVar (..)
   , mkGVar
   , mkGVarId
+  , mapGVar
   , resolveGVar
   , concreteGVar
   , gvarLabel

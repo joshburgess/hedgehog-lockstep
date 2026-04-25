@@ -41,6 +41,7 @@ cmdPut store = LockstepCmd
   , lsCmdRequire    = \_ _ -> True
   , lsCmdObserve    = \() () -> pure ()
   , lsCmdInvariants = \_ _ -> pure ()
+  , lsCmdTag        = \_ _ _ -> []
   }
 
 cmdGet :: IORef (Map String Int) -> LockstepCmd (PropertyT IO) Model
@@ -51,6 +52,7 @@ cmdGet store = LockstepCmd
   , lsCmdRequire    = \_ _ -> True
   , lsCmdObserve    = \expected actual -> expected === actual
   , lsCmdInvariants = \_ _ -> pure ()
+  , lsCmdTag        = \_ _ _ -> []
   }
 
 -- Run the property
@@ -117,6 +119,13 @@ cmdWrite ref = LockstepCmd
 
 Partial projections (`OpLeft`, `OpRight`) return `Nothing` on mismatch.
 
+If you already hold a `GVar` and want to project further, use `mapGVar`:
+
+```haskell
+gv     :: GVar (Either err (Handle, Name)) v
+gvHandle = mapGVar (OpRight >>> OpFst) gv  -- :: GVar Handle v
+```
+
 ## LockstepCmd fields
 
 | Field | Type | Purpose |
@@ -127,6 +136,7 @@ Partial projections (`OpLeft`, `OpRight`) return `Nothing` on mismatch.
 | `lsCmdRequire` | `model -> input Symbolic -> Bool` | Additional preconditions |
 | `lsCmdObserve` | `modelOutput -> output -> Test ()` | Compare model and real results |
 | `lsCmdInvariants` | `model -> output -> Test ()` | System invariants beyond the lockstep check |
+| `lsCmdTag` | `model -> model -> modelOutput -> [String]` | Per-step coverage tags (pre-state, post-state, model output) |
 
 ## Running tests
 
@@ -151,7 +161,19 @@ Parallel operations must be thread-safe: use `atomicModifyIORef'`, `MVar`, or `T
 
 ## Coverage labels
 
-`lsCmdObserve` runs in `Test ()`, so Hedgehog's `label`, `classify`, and `cover` work directly inside it. There's no separate tagging API.
+There are two ways to get per-test coverage. Use whichever is more natural for the tag in question.
+
+**`lsCmdTag`** is the dedicated per-step tagging hook (the analogue of `quickcheck-lockstep`'s `tagStep`). It receives the pre-step model, the post-step model, and the model's predicted output, and returns a list of string tags. Each tag is fed to `Hedgehog.label`. This is the right place for tags that depend on how the model state changed during the step.
+
+```haskell
+cmdPut store = LockstepCmd
+  { ...
+  , lsCmdTag = \pre post () ->
+      ["Put", if Map.size post > Map.size pre then "Put new key" else "Put overwrite"]
+  }
+```
+
+**`lsCmdObserve`** runs in `Test ()`, so Hedgehog's `label`, `classify`, and `cover` work directly inside it. Use this for tags that depend on the real output (which `lsCmdTag` doesn't see).
 
 ```haskell
 cmdGet store = LockstepCmd
@@ -164,7 +186,11 @@ cmdGet store = LockstepCmd
   }
 ```
 
-Hedgehog aggregates the labels across the run and prints them in the failure report (or always, if you use `cover`). See `test/Test/KVStore.hs` for a full example.
+Hedgehog aggregates the labels across the run and prints a per-tag distribution table in the test summary. See `test/Test/KVStore.hs` for both styles.
+
+## Failure diagnostics
+
+When a test fails, `hedgehog-lockstep` automatically `footnote`s the post-step model state at every command. Hedgehog only displays footnotes on failure, so passing tests pay nothing, but a failing test now shows the model trail alongside the shrunken command sequence (the analogue of `quickcheck-lockstep`'s `monitoring` counterexample enrichment). This requires `Show model`, which is already needed by Hedgehog's `Gen.sequential`.
 
 ## System invariants
 

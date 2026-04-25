@@ -9,6 +9,7 @@ module Hedgehog.Lockstep.GVar
   ( GVar (..)
   , mkGVar
   , mkGVarId
+  , mapGVar
   , resolveGVar
   , concreteGVar
   , gvarLabel
@@ -70,6 +71,24 @@ mkGVarId
 mkGVarId var =
   GVar var "id" fromDynamic
 {-# INLINABLE mkGVarId #-}
+
+-- | Compose an additional 'Op' projection onto an existing t'GVar'.
+--
+-- Useful when you already hold a t'GVar' to a structured value and want
+-- to project further. For example, given a @t'GVar' ('Either' err (h, name)) v@,
+-- @'mapGVar' ('Hedgehog.Lockstep.Op.OpRight' 'Hedgehog.Lockstep.Op.>>>' 'Hedgehog.Lockstep.Op.OpFst')@
+-- produces a @t'GVar' h v@.
+--
+-- The new t'GVar' shares the underlying Hedgehog t'Hedgehog.Internal.State.Var'
+-- and the existing resolution chain; only the final projection step
+-- changes. The human-readable label is extended with the new 'Op'.
+--
+-- This is the 'hedgehog-lockstep' analogue of @quickcheck-lockstep@'s
+-- @mapGVar@.
+mapGVar :: forall a b v. Op a b -> GVar a v -> GVar b v
+mapGVar op (GVar var label resolve) =
+  GVar var (label <> "." <> showOp op) (\dyn -> resolve dyn >>= applyOp op)
+{-# INLINABLE mapGVar #-}
 
 -- | Resolve a t'GVar' against a model environment.
 -- Uses 'Ord1' for phase-polymorphic t'Hedgehog.Internal.State.Var'

@@ -2,6 +2,7 @@
 module Test.UnitCoverage
   ( prop_applyOp
   , prop_gvarLabel
+  , prop_mapGVar
   , prop_mkGVarId
   ) where
 
@@ -46,6 +47,28 @@ prop_gvarLabel = withTests 1 $ property $ do
     === "right.fst"
 
 -- ---------------------------------------------------------------------------
+-- mapGVar: composing an additional projection onto an existing GVar
+--
+-- Build a GVar that projects the @Right@ branch of an @Either@, then use
+-- 'mapGVar' to extend it with @OpFst@ to land on the first tuple element.
+-- The resulting GVar resolves to that element via 'concreteGVar' and
+-- carries the composed projection in its label.
+-- ---------------------------------------------------------------------------
+
+prop_mapGVar :: Property
+prop_mapGVar = withTests 1 $ property $ do
+  let v :: Var (Either String (Int, Int)) Concrete
+      v = Var (Concrete (Right (7, 9)))
+      gvRight :: GVar (Int, Int) Concrete
+      gvRight = mkGVar v (OpRight :: Op (Either String (Int, Int)) (Int, Int))
+      gvFst :: GVar Int Concrete
+      gvFst = mapGVar OpFst gvRight
+  gvarLabel gvFst    === "right.fst"
+  concreteGVar gvFst === Just 7
+  -- Mapping with OpId is the identity (modulo the label suffix).
+  concreteGVar (mapGVar OpId gvRight) === Just (7, 9)
+
+-- ---------------------------------------------------------------------------
 -- mkGVarId: an integration test using identity projection
 --
 -- The action returns a single Int. A later command takes a GVar Int that
@@ -78,6 +101,7 @@ cmdPut ref = LockstepCmd
   , lsCmdRequire    = \_ _ -> True
   , lsCmdObserve    = \expected actual -> expected === actual
   , lsCmdInvariants = \_ _ -> pure ()
+  , lsCmdTag        = \_ _ _ -> []
   }
 
 cmdEcho :: LockstepCmd (PropertyT IO) Model
@@ -100,6 +124,7 @@ cmdEcho = LockstepCmd
   , lsCmdObserve = \expected actual -> expected === actual
 
   , lsCmdInvariants = \_ _ -> pure ()
+  , lsCmdTag        = \_ _ _ -> []
   }
 
 prop_mkGVarId :: Property

@@ -151,12 +151,14 @@ data LockstepCmd m model = forall input output modelOutput.
   , Show output, Typeable output, Ord output
   , Typeable modelOutput, Eq modelOutput, Show modelOutput
   ) => LockstepCmd
-  { lsCmdGen     :: LockstepState model Symbolic -> Maybe (Gen (input Symbolic))
-  , lsCmdExec    :: input Concrete -> m output
-  , lsCmdModel   :: forall v. Ord1 v =>
-                    LockstepState model v -> input v -> (modelOutput, model)
-  , lsCmdRequire :: model -> input Symbolic -> Bool
-  , lsCmdObserve :: modelOutput -> output -> Test ()
+  { lsCmdGen        :: LockstepState model Symbolic -> Maybe (Gen (input Symbolic))
+  , lsCmdExec       :: input Concrete -> m output
+  , lsCmdModel      :: forall v. Ord1 v =>
+                       LockstepState model v -> input v -> (modelOutput, model)
+  , lsCmdRequire    :: model -> input Symbolic -> Bool
+  , lsCmdObserve    :: modelOutput -> output -> Test ()
+  , lsCmdInvariants :: model -> output -> Test ()
+  , lsCmdTag        :: model -> model -> modelOutput -> [String]
   }
 ```
 
@@ -166,7 +168,12 @@ The library converts each `LockstepCmd` into a Hedgehog `Command` by wiring:
 - **Update**: run `lsCmdModel` to advance the model, then store the model-side
   result in `LockstepState` keyed by the Hedgehog `Var`.
 - **Ensure**: retrieve the stored model result and compare it with the real
-  output via `lsCmdObserve`.
+  output via `lsCmdObserve`. The Ensure callback also runs `lsCmdInvariants`
+  for system invariants, calls `lsCmdTag` and feeds each returned tag to
+  `Hedgehog.label` for per-step coverage, and `footnote`s the post-step
+  model state so that test failures display the model trail. Hedgehog only
+  prints footnotes on failure, so passing tests pay nothing for the
+  diagnostic.
 
 This is simpler than the `InLockstep` typeclass stack in quickcheck-lockstep:
 there's no `ModelValue` GADT, no `Observable` GADT, no `observeModel`/
@@ -334,9 +341,9 @@ module Hedgehog.Lockstep
   )
 ```
 
-There is no `Observe` class, no `ModelResult` type family, no `lsCmdTag`, and
-no `lockstepLabelledExamples`. Sections 1-2 describe the shape those would
-have taken; section 5 explains why they were deferred.
+There is no `Observe` class, no `ModelResult` type family, and no
+`lockstepLabelledExamples`. Sections 1-2 describe the shape those would have
+taken; section 5 explains why they were deferred.
 
 ---
 
@@ -367,11 +374,19 @@ is really a property of the design rather than additional code.
 
 ### 5.3 Tagging and labelled examples
 
-The design discussed `lsCmdTag`, a per-command classifier that could collect
-labels during execution rather than by re-running the model as
-`quickcheck-lockstep` does. This was not implemented. Hedgehog's `classify`
-and `label` can be called inside `lsCmdObserve` today, which covers most use
-cases; a dedicated tagging surface can be added if and when users need more.
+The library ships `lsCmdTag :: model -> model -> modelOutput -> [String]`,
+the analogue of `quickcheck-lockstep`'s `tagStep`. It runs in the `Ensure`
+callback, sees the pre- and post-step model and the model's predicted output,
+and feeds each returned tag to `Hedgehog.label` so per-tag distribution shows
+up in the test summary. `Hedgehog.classify` and `Hedgehog.label` calls inside
+`lsCmdObserve` are still supported for ad-hoc tagging that depends on the
+real output.
+
+What is *not* yet shipped is a `lockstepLabelledExamples` workflow: the
+QC-lockstep `tagActions` re-runs the model only (no real execution) to collect
+labels for `labelledExamples`. Hedgehog has no `labelledExamples` primitive,
+so an equivalent would require deeper Hedgehog integration. Deferred to a
+later release.
 
 ### 5.4 Compositional commands
 
@@ -383,10 +398,11 @@ thought than v0.1 warranted.
 
 ### 5.5 Extra per-command `Ensure` callbacks
 
-Users could attach assertions beyond the lockstep postcondition ("after every
-Write, the file size is positive"). This can be approximated today inside
-`lsCmdObserve`. A dedicated field would make it clearer but is not
-essential.
+The library ships `lsCmdInvariants :: model -> output -> Test ()` for system
+invariants that hold after every command, separate from the lockstep
+model-vs-real equality check in `lsCmdObserve` ("after every Write, the file
+size is positive"; "the open-handle count never exceeds the next-handle
+counter"). The `Test.HandleStore` and `Test.KVStore` examples exercise this.
 
 ### 5.6 `falsify` as an alternative foundation
 
@@ -407,7 +423,7 @@ peer would be interesting future work.
 | **Model / real divergence** | `ModelValue`/`Observable` GADTs plus `observeModel`/`observeReal` | `modelOutput` existential plus per-command `lsCmdObserve` |
 | **Variable tracking** | Manual `usedVars` | Automatic via `TraversableB` |
 | **Parallel testing** | Not supported | Supported via `executeParallel` |
-| **Tagging** | Requires model re-execution | Use Hedgehog `classify` / `label` in observer |
+| **Tagging** | `tagStep` + `tagActions` re-runs model | `lsCmdTag` + Hedgehog `label`; ad-hoc `classify` / `label` in observer also supported |
 | **Error messages** | Custom `Show` for `Observable` | Hedgehog's diff infrastructure |
 | **Dependency stack** | QC + qc-dynamic + qc-lockstep | Hedgehog + hedgehog-lockstep |
 | **Command structure** | Single GADT + typeclass | List of `Command` records |

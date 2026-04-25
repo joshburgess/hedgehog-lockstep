@@ -64,6 +64,7 @@ cmdInc ref = LockstepCmd
   , lsCmdRequire = \_ _ -> True
   , lsCmdObserve = \expected actual -> expected === actual
   , lsCmdInvariants = \_ _ -> pure ()
+  , lsCmdTag = \_ _ _ -> []
   }
 
 cmdGet :: IORef Int -> LockstepCmd (PropertyT IO) Model
@@ -76,6 +77,7 @@ cmdGet ref = LockstepCmd
   , lsCmdRequire = \_ _ -> True
   , lsCmdObserve = \expected actual -> expected === actual
   , lsCmdInvariants = \_ _ -> pure ()
+  , lsCmdTag = \_ _ _ -> []
   }
 
 -- ---------------------------------------------------------------------------

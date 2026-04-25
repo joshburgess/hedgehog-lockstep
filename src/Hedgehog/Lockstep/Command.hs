@@ -15,10 +15,11 @@ module Hedgehog.Lockstep.Command
 
 import Data.Dynamic (dynTypeRep, fromDynamic)
 import Data.Proxy (Proxy (..))
+import Data.String (fromString)
 import Data.Typeable (TypeRep, Typeable, typeRep)
 import Data.Functor.Barbie (TraversableB)
 import Data.Functor.Classes (Ord1)
-import Hedgehog (Gen, Test, footnote, failure)
+import Hedgehog (Gen, Test, footnote, failure, label)
 import Hedgehog.Internal.State
   ( Command (..)
   , Callback (..)
@@ -94,12 +95,34 @@ data LockstepCmd m model = forall input output modelOutput.
     --
     -- Use @\\_ _ -> 'pure' ()@ if you have nothing extra to check.
   , lsCmdInvariants :: model -> output -> Test ()
+
+    -- | Optional per-step coverage tags. Receives the pre-step model state,
+    -- the post-step model state, and the model's predicted output. Returns
+    -- a list of string tags; each tag becomes a 'Hedgehog.label' call so the
+    -- test summary reports per-tag distribution.
+    --
+    -- This is the 'hedgehog-lockstep' analogue of @quickcheck-lockstep@'s
+    -- @tagStep@. Calling 'Hedgehog.label' or 'Hedgehog.classify' inside
+    -- 'lsCmdObserve' also works for ad-hoc coverage, but 'lsCmdTag' is the
+    -- natural place for tags whose value depends on how the model state
+    -- changed during this step (e.g., \"insert into empty\",
+    -- \"delete present key\", \"size grew past threshold\").
+    --
+    -- Use @\\_ _ _ -> []@ if you don't need coverage tagging.
+  , lsCmdTag :: model -> model -> modelOutput -> [String]
   }
 
 -- | Convert a t'LockstepCmd' into a Hedgehog
 -- t'Hedgehog.Internal.State.Command'.
+--
+-- The resulting command's @Ensure@ callback always 'Hedgehog.footnote's
+-- the post-step model. Hedgehog only displays footnotes when a test
+-- fails, so this gives a free post-mortem trace of the model state
+-- evolution while costing nothing for passing tests. This is the
+-- analogue of @quickcheck-lockstep@'s @monitoring@ counterexample
+-- enrichment.
 toLockstepCommand
-  :: (Monad m)
+  :: (Show model, Monad m)
   => LockstepCmd m model -> Command Gen m (LockstepState model)
 {-# INLINABLE toLockstepCommand #-}
 toLockstepCommand (LockstepCmd{..}) = Command gen exec callbacks
@@ -116,7 +139,11 @@ toLockstepCommand (LockstepCmd{..}) = Command gen exec callbacks
           let (modelOut, model') = lsCmdModel st input
           in insertModelResult var modelOut (st { lsModel = model' })
 
-      , Ensure $ \_oldSt newSt _input output ->
+      , Ensure $ \oldSt newSt _input output -> do
+          -- Model-state footnote: only displayed on failure, so this is
+          -- effectively free for passing tests but gives a state trace
+          -- when something goes wrong.
+          footnote $ "model post-step: " <> show (lsModel newSt)
           -- The most recently inserted model result corresponds to
           -- this action. 'lsLastEntry' is set by 'insertModelResult'
           -- in the matching 'Update' callback above.
@@ -124,6 +151,11 @@ toLockstepCommand (LockstepCmd{..}) = Command gen exec callbacks
             Just dyn ->
               case fromDynamic dyn of
                 Just modelOut -> do
+                  -- Coverage tagging fires before observation so that
+                  -- the test report records the tag even on the test
+                  -- run that shrinks down to the failing example.
+                  mapM_ (label . fromString) $
+                    lsCmdTag (lsModel oldSt) (lsModel newSt) modelOut
                   lsCmdObserve modelOut output
                   lsCmdInvariants (lsModel newSt) output
                 Nothing -> do

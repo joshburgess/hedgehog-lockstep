@@ -54,6 +54,8 @@ cmdSort = LockstepCmd
   -- System invariant: a sorted list is monotonically non-decreasing.
   , lsCmdInvariants = \_ xs ->
       assert (and (zipWith (<=) xs (drop 1 xs)))
+
+  , lsCmdTag = \_ _ _ -> []
   }
 
 prop_pureSort :: Property

@@ -34,7 +34,7 @@ import Hedgehog.Lockstep.Command (LockstepCmd, toLockstepCommand)
 -- | Convert a list of 'LockstepCmd's into Hedgehog
 -- 'Hedgehog.Internal.State.Command's.
 lockstepCommands
-  :: (Monad m)
+  :: (Show model, Monad m)
   => [LockstepCmd m model] -> [Command Gen m (LockstepState model)]
 lockstepCommands = map toLockstepCommand
 {-# INLINABLE lockstepCommands #-}

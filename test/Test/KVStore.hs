@@ -91,9 +91,14 @@ cmdPut store = LockstepCmd
 
   , lsCmdRequire = \_ _ -> True
 
-  , lsCmdObserve = \() () -> label "Put"
+  , lsCmdObserve = \() () -> pure ()
 
   , lsCmdInvariants = \_ _ -> pure ()
+
+  -- Demonstrate the per-step tagging hook: split Put coverage into
+  -- "new key" (size grew) vs "overwrite" (size unchanged).
+  , lsCmdTag = \pre post () ->
+      ["Put", if Map.size post > Map.size pre then "Put new key" else "Put overwrite"]
   }
 
 cmdGet :: Store -> LockstepCmd (PropertyT IO) Model
@@ -115,6 +120,8 @@ cmdGet store = LockstepCmd
       expected === actual
 
   , lsCmdInvariants = \_ _ -> pure ()
+
+  , lsCmdTag = \_ _ _ -> []
   }
 
 cmdDelete :: Store -> LockstepCmd (PropertyT IO) Model
@@ -136,6 +143,8 @@ cmdDelete store = LockstepCmd
   , lsCmdObserve = \() () -> label "Delete"
 
   , lsCmdInvariants = \_ _ -> pure ()
+
+  , lsCmdTag = \_ _ _ -> []
   }
 
 cmdSize :: Store -> LockstepCmd (PropertyT IO) Model
@@ -156,6 +165,8 @@ cmdSize store = LockstepCmd
 
   -- System invariant: store size is never negative.
   , lsCmdInvariants = \_ size -> assert (size >= 0)
+
+  , lsCmdTag = \_ _ _ -> []
   }
 
 -- ---------------------------------------------------------------------------
