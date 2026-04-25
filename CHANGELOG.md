@@ -25,6 +25,15 @@ Initial release.
 - Four test entry points:
   `lockstepProperty`, `lockstepPropertyWith`, `lockstepParallel`, and
   `lockstepParallelWith`.
+- Monad-parameterized variants
+  `lockstepPropertyM`, `lockstepPropertyWithM`, `lockstepParallelM`, and
+  `lockstepParallelWithM` accepting a
+  `forall a. m a -> PropertyT IO a` (or `env -> m a -> PropertyT IO a`)
+  natural transformation. Lets users write commands in a custom monad
+  stack (e.g., `ReaderT env (PropertyT IO)`) and supply the runner
+  separately, without hardcoding `PropertyT IO` into every `lsCmdExec`.
+- `hoistLockstepCmd :: (forall a. m a -> n a) -> LockstepCmd m model -> LockstepCmd n model`
+  for retargeting a command's monad.
 - `lockstepCommands` for users who want to drive
   `Gen.sequential` / `executeSequential` directly.
 - README guidance and a `Test.KVStore` example for using

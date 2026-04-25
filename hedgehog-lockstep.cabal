@@ -93,6 +93,7 @@ test-suite hedgehog-lockstep-test
     Test.OpProjections
     Test.ParallelKV
     Test.PureSort
+    Test.ReaderKV
     Test.UnitCoverage
 
   build-depends:
@@ -101,3 +102,4 @@ test-suite hedgehog-lockstep-test
     , containers        >=0.6  && <0.9
     , hedgehog          >=1.4  && <1.6
     , hedgehog-lockstep
+    , mtl               >=2.2  && <2.4

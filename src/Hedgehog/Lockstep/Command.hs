@@ -11,6 +11,7 @@
 module Hedgehog.Lockstep.Command
   ( LockstepCmd (..)
   , toLockstepCommand
+  , hoistLockstepCmd
   ) where
 
 import Data.Dynamic (dynTypeRep, fromDynamic)
@@ -182,3 +183,29 @@ expectedModelType
   :: forall modelOutput output. Typeable modelOutput
   => (modelOutput -> output -> Test ()) -> TypeRep
 expectedModelType _ = typeRep (Proxy @modelOutput)
+
+-- | Transform the monad of a t'LockstepCmd' by lifting the exec function
+-- through a natural transformation @m -> n@.
+--
+-- This is the hook that lets users write commands in a monad of their
+-- choice (e.g., @'Control.Monad.Reader.ReaderT' Connection ('Hedgehog.PropertyT' 'IO')@)
+-- while still running them with hedgehog's runner, which expects
+-- @'Hedgehog.PropertyT' 'IO'@. The monad-parameterized runners
+-- ('Hedgehog.Lockstep.Property.lockstepPropertyM' and friends) use
+-- 'hoistLockstepCmd' under the hood.
+--
+-- All other fields are preserved unchanged.
+hoistLockstepCmd
+  :: (forall a. m a -> n a)
+  -> LockstepCmd m model
+  -> LockstepCmd n model
+hoistLockstepCmd nat LockstepCmd{..} = LockstepCmd
+  { lsCmdGen        = lsCmdGen
+  , lsCmdExec       = nat . lsCmdExec
+  , lsCmdModel      = lsCmdModel
+  , lsCmdRequire    = lsCmdRequire
+  , lsCmdObserve    = lsCmdObserve
+  , lsCmdInvariants = lsCmdInvariants
+  , lsCmdTag        = lsCmdTag
+  }
+{-# INLINABLE hoistLockstepCmd #-}

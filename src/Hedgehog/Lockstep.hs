@@ -20,6 +20,7 @@ module Hedgehog.Lockstep
   ( -- * Commands
     LockstepCmd (..)
   , toLockstepCommand
+  , hoistLockstepCmd
   , lockstepCommands
 
     -- * State
@@ -49,6 +50,12 @@ module Hedgehog.Lockstep
   , lockstepPropertyWith
   , lockstepParallel
   , lockstepParallelWith
+
+    -- * Running tests in arbitrary monads
+  , lockstepPropertyM
+  , lockstepPropertyWithM
+  , lockstepParallelM
+  , lockstepParallelWithM
 
     -- * Re-exports from Hedgehog
   , Var (..)

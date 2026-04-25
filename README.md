@@ -159,6 +159,45 @@ The bare `lockstepProperty` and `lockstepParallel` are for commands that don't n
 
 Parallel operations must be thread-safe: use `atomicModifyIORef'`, `MVar`, or `TVar` rather than `modifyIORef'`.
 
+### Running tests in your own monad
+
+If your commands are written in a custom monad stack (e.g., `ReaderT Connection (PropertyT IO)`), use the `*M` variants to plug in a runner. They take a natural transformation that lowers your monad back to `PropertyT IO`:
+
+```haskell
+-- Sequential, in an arbitrary monad m
+lockstepPropertyM
+  :: (Show model, Monad m)
+  => model -> Int
+  -> (forall a. m a -> PropertyT IO a)  -- ^ how to run m
+  -> [LockstepCmd m model]
+  -> Property
+
+-- With an IO resource: the runner receives the resource per test case
+lockstepPropertyWithM
+  :: (Show model, Monad m)
+  => model -> Int
+  -> IO env -> (env -> IO ())
+  -> (forall a. env -> m a -> PropertyT IO a)
+  -> (env -> [LockstepCmd m model])
+  -> Property
+
+-- Parallel variants: lockstepParallelM, lockstepParallelWithM
+```
+
+For a `ReaderT env (PropertyT IO)` stack the runner is just `flip runReaderT`:
+
+```haskell
+prop_kv :: Property
+prop_kv =
+  lockstepPropertyWithM
+    Map.empty 50
+    newStore resetStore
+    (\store m -> runReaderT m store)
+    (\_store -> [cmdPut, cmdGet])
+```
+
+Now the command bodies can `ask` the resource from the environment instead of closing over it. See `test/Test/ReaderKV.hs` for the full example.
+
 ## Coverage labels
 
 There are two ways to get per-test coverage. Use whichever is more natural for the tag in question.
