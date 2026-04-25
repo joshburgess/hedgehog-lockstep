@@ -24,7 +24,7 @@ module Hedgehog.Lockstep
 
     -- * State
   , LockstepState (..)
-  , ModelEntry (..)
+  , ModelEnv
   , initialLockstepState
   , getModel
   , getEntries

@@ -186,14 +186,20 @@ than the GADT-based alternative.
 data LockstepState model v = LockstepState
   { lsModel     :: !model
   , lsNextVarId :: !Int
-  , lsEntries   :: ![ModelEntry v]
+  , lsEntries   :: !(ModelEnv v)
   , lsVars      :: ![SomeVar v]
+  , lsLastEntry :: !(Maybe Dynamic)
   }
+
+newtype ModelEnv v = ModelEnv (Map (VarKey v) Dynamic)
 ```
 
-`lsEntries` is the lockstep environment: each `ModelEntry v` pairs a Hedgehog
-`Var` with the model-side result (stored as `Dynamic`). `lsVars` is a parallel
-list used by `varsOfType` to enumerate available variables during generation.
+`lsEntries` is the lockstep environment: a `Map` keyed by an existential
+`VarKey` that wraps a Hedgehog `Var` with phase-polymorphic ordering. Values
+are model-side results stored as `Dynamic`. `lsVars` is a parallel list used
+by `varsOfType` to enumerate available variables during generation.
+`lsLastEntry` caches the most recently inserted result so the `Ensure`
+callback can compare it with the real output without re-scanning.
 
 The environment supports both phases:
 
@@ -201,7 +207,13 @@ The environment supports both phases:
   (unchanged by shrinking).
 - In the **Concrete** phase, comparison is by value.
 
-Both cases are unified through `Ord1` on the phase functor `v`.
+Both cases are unified through `Ord1` on the phase functor `v`. The `Ord`
+instance on `VarKey` first compares type representations, then defers to
+`Ord1` for same-typed variables.
+
+Lookup is O(log n) in the number of completed actions. An earlier
+implementation used a list and `Ord1`-based linear scan, which made the
+per-test cost quadratic on long action traces.
 
 ### 3.4 `GVar` and `Op`: Projections from Compound Results
 
@@ -289,7 +301,7 @@ module Hedgehog.Lockstep
 
     -- State
   , LockstepState (..)
-  , ModelEntry (..)
+  , ModelEnv
   , initialLockstepState
   , getModel
   , getEntries

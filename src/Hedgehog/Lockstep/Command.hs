@@ -115,9 +115,11 @@ toLockstepCommand (LockstepCmd{..}) = Command gen exec callbacks
           in insertModelResult var modelOut (st { lsModel = model' })
 
       , Ensure $ \_oldSt newSt _input output ->
-          -- The most recent entry in newSt corresponds to this action
-          case lsEntries newSt of
-            (ModelEntry _ dyn : _) ->
+          -- The most recently inserted model result corresponds to
+          -- this action. 'lsLastEntry' is set by 'insertModelResult'
+          -- in the matching 'Update' callback above.
+          case lsLastEntry newSt of
+            Just dyn ->
               case fromDynamic dyn of
                 Just modelOut -> do
                   lsCmdObserve modelOut output
@@ -125,7 +127,7 @@ toLockstepCommand (LockstepCmd{..}) = Command gen exec callbacks
                 Nothing -> do
                   footnote "hedgehog-lockstep internal error: model result type mismatch"
                   failure
-            [] -> do
+            Nothing -> do
               footnote "hedgehog-lockstep internal error: no model entries"
               failure
       ]

@@ -21,7 +21,7 @@ import Hedgehog.Internal.State (Var (..), Concrete (..))
 import Data.Functor.Barbie (FunctorB (..), TraversableB (..))
 
 import Hedgehog.Lockstep.Op (Op, applyOp, showOp)
-import Hedgehog.Lockstep.State (ModelEntry, lookupModelEntry)
+import Hedgehog.Lockstep.State (ModelEnv, lookupModelEntry)
 
 -- | A generalized variable that projects a value of type @a@ from a
 -- previous action's output via the model environment.
@@ -74,7 +74,7 @@ mkGVarId var =
 -- | Resolve a t'GVar' against a model environment.
 -- Uses 'Ord1' for phase-polymorphic t'Hedgehog.Internal.State.Var'
 -- comparison.
-resolveGVar :: Ord1 v => GVar a v -> [ModelEntry v] -> Maybe a
+resolveGVar :: Ord1 v => GVar a v -> ModelEnv v -> Maybe a
 resolveGVar (GVar var _ resolve) entries =
   lookupModelEntry var entries >>= resolve
 {-# INLINABLE resolveGVar #-}

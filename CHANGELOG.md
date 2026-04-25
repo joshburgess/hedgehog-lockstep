@@ -13,8 +13,9 @@ Initial release.
 
 - `LockstepCmd` record bundling an API operation with its model
   interpretation and observation.
-- `LockstepState` wrapping a user-defined model plus a model environment
-  keyed by Hedgehog `Var` identity.
+- `LockstepState` wrapping a user-defined model plus a `ModelEnv`,
+  a `Map` keyed by Hedgehog `Var` identity (O(log n) lookup) using a
+  phase-polymorphic `Ord1`-based comparison.
 - `GVar` and `Op` (`OpId`, `OpFst`, `OpSnd`, `OpLeft`, `OpRight`, `OpComp`)
   for projecting values out of compound action outputs.
 - `varsOfType`, `mkGVar`, `mkGVarId`, `resolveGVar`, `concreteGVar`,

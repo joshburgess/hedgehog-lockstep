@@ -1,4 +1,5 @@
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 -- | The lockstep state: the user's pure model alongside a model environment
 -- that maps Hedgehog t'Hedgehog.Internal.State.Var's to their model-side
 -- output values.
@@ -7,30 +8,55 @@
 -- resolution work across the symbolic and concrete phases.
 module Hedgehog.Lockstep.State
   ( LockstepState (..)
-  , ModelEntry (..)
+  , ModelEnv
   , SomeVar (..)
   , initialLockstepState
   , getModel
   , getEntries
   , getNextVarId
+  , getLastEntry
   , varsOfType
   , insertModelResult
   , lookupModelEntry
   ) where
 
 import Data.Dynamic (Dynamic, toDyn)
-import Data.Typeable (Typeable, eqT)
+import Data.Map.Strict (Map)
+import Data.Map.Strict qualified as Map
+import Data.Proxy (Proxy (..))
+import Data.Typeable (Typeable, eqT, typeRep)
 import Type.Reflection ((:~:) (..))
 import Data.Functor.Classes (Ord1, liftCompare)
 import Hedgehog.Internal.State (Var (..), Symbolic)
 
--- | An entry in the model environment, storing a Var and its model result.
-data ModelEntry v where
-  ModelEntry
-    :: (Typeable a, Ord a)
-    => !(Var a v)
-    -> !Dynamic      -- ^ Model result for this variable
-    -> ModelEntry v
+-- | Existential variable key with phase-polymorphic ordering.
+--
+-- Internal: not exposed in the public API. The 'Ord' instance compares
+-- by type first, then by phase-specific identity ('Hedgehog.Internal.State.Name'
+-- for t'Hedgehog.Internal.State.Symbolic', value for
+-- t'Hedgehog.Internal.State.Concrete').
+data VarKey v where
+  VarKey :: (Typeable a, Ord a) => !(Var a v) -> VarKey v
+
+instance Ord1 v => Eq (VarKey v) where
+  VarKey (Var v1 :: Var x v) == VarKey (Var v2 :: Var y v) =
+    case eqT @x @y of
+      Just Refl -> liftCompare compare v1 v2 == EQ
+      Nothing   -> False
+
+instance Ord1 v => Ord (VarKey v) where
+  compare (VarKey (Var v1 :: Var x v)) (VarKey (Var v2 :: Var y v)) =
+    case eqT @x @y of
+      Just Refl -> liftCompare compare v1 v2
+      Nothing   -> compare (typeRep (Proxy @x)) (typeRep (Proxy @y))
+
+-- | The model environment: associates t'Hedgehog.Internal.State.Var's
+-- with their model-side output values. Stored as a 'Data.Map.Strict.Map'
+-- so lookups are @O(log n)@.
+--
+-- Opaque: construct via 'insertModelResult' and look up via
+-- 'lookupModelEntry' or 'Hedgehog.Lockstep.GVar.resolveGVar'.
+newtype ModelEnv v = ModelEnv (Map (VarKey v) Dynamic)
 
 -- | An existentially-wrapped t'Hedgehog.Internal.State.Var' with its
 -- type witness.
@@ -46,8 +72,11 @@ data SomeVar v where
 data LockstepState model v = LockstepState
   { lsModel     :: !model
   , lsNextVarId :: {-# UNPACK #-} !Int
-  , lsEntries   :: ![ModelEntry v]
+  , lsEntries   :: !(ModelEnv v)
   , lsVars      :: ![SomeVar v]
+  , lsLastEntry :: !(Maybe Dynamic)
+  -- ^ The most recently inserted model result, used by the @Ensure@
+  -- callback to compare against the real output.
   }
 
 instance Show model => Show (LockstepState model v) where
@@ -63,21 +92,27 @@ initialLockstepState :: model -> LockstepState model v
 initialLockstepState m = LockstepState
   { lsModel     = m
   , lsNextVarId = 0
-  , lsEntries   = []
+  , lsEntries   = ModelEnv Map.empty
   , lsVars      = []
+  , lsLastEntry = Nothing
   }
 
 -- | Extract the user's model state.
 getModel :: LockstepState model v -> model
 getModel = lsModel
 
--- | Extract the model entries.
-getEntries :: LockstepState model v -> [ModelEntry v]
+-- | Extract the model environment.
+getEntries :: LockstepState model v -> ModelEnv v
 getEntries = lsEntries
 
 -- | Get the next variable ID (used internally for Ensure lookup).
 getNextVarId :: LockstepState model v -> Int
 getNextVarId = lsNextVarId
+
+-- | Get the most recently inserted model result, if any. Used by the
+-- @Ensure@ callback to compare against the real output.
+getLastEntry :: LockstepState model v -> Maybe Dynamic
+getLastEntry = lsLastEntry
 
 -- | Enumerate all variables of a given type.
 -- Useful in generators to pick a variable for a
@@ -92,38 +127,27 @@ varsOfType st =
   ]
 {-# INLINABLE varsOfType #-}
 
--- | Look up a model result by matching the
--- t'Hedgehog.Internal.State.Var' identity.
--- Uses 'Ord1' for phase-polymorphic comparison:
--- for t'Hedgehog.Internal.State.Symbolic', compares by hedgehog Name
--- (stable across shrinking); for t'Hedgehog.Internal.State.Concrete',
--- compares by value.
+-- | Look up a model result by t'Hedgehog.Internal.State.Var' identity.
+-- @O(log n)@ in the size of the model environment.
 lookupModelEntry
   :: forall x v. (Typeable x, Ord x, Ord1 v)
-  => Var x v -> [ModelEntry v] -> Maybe Dynamic
-lookupModelEntry var entries = go entries
-  where
-    go [] = Nothing
-    go (ModelEntry (entryVar :: Var b v) dyn : rest) =
-      case eqT @x @b of
-        Just Refl
-          | varEq var entryVar -> Just dyn
-        _ -> go rest
-
-    varEq :: Var x v -> Var x v -> Bool
-    varEq (Var v1) (Var v2) = liftCompare compare v1 v2 == EQ
+  => Var x v -> ModelEnv v -> Maybe Dynamic
+lookupModelEntry var (ModelEnv m) = Map.lookup (VarKey var) m
 {-# INLINABLE lookupModelEntry #-}
 
 -- | Insert a model result into the state and register the variable.
 -- Used internally by 'Hedgehog.Lockstep.Command.toLockstepCommand'.
 insertModelResult
-  :: (Typeable modelOutput, Typeable output, Ord output)
+  :: (Typeable modelOutput, Typeable output, Ord output, Ord1 v)
   => Var output v -> modelOutput -> LockstepState model v -> LockstepState model v
 insertModelResult var modelOut st =
   let varId = lsNextVarId st
+      dyn   = toDyn modelOut
+      ModelEnv entries = lsEntries st
   in st
     { lsNextVarId = varId + 1
-    , lsEntries   = ModelEntry var (toDyn modelOut) : lsEntries st
+    , lsEntries   = ModelEnv (Map.insert (VarKey var) dyn entries)
     , lsVars      = SomeVar var : lsVars st
+    , lsLastEntry = Just dyn
     }
 {-# INLINABLE insertModelResult #-}
