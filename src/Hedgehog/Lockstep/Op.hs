@@ -11,7 +11,7 @@ module Hedgehog.Lockstep.Op
 -- For example, if an action returns @Either Err (Handle, FilePath)@, you can
 -- compose @OpRight '>>>' OpFst@ to extract the @Handle@.
 --
--- 'OpLeft' and 'OpRight' are partial projections — 'applyOp' returns
+-- 'OpLeft' and 'OpRight' are partial projections: 'applyOp' returns
 -- 'Nothing' if the 'Either' doesn't match.
 data Op a b where
   OpId    :: Op a a
