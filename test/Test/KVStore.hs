@@ -7,6 +7,7 @@ module Test.KVStore
 import Data.IORef (IORef, newIORef, readIORef, modifyIORef')
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
+import Data.Maybe (isJust)
 import Hedgehog
 import Hedgehog.Gen qualified as Gen
 import Hedgehog.Range qualified as Range
@@ -90,7 +91,7 @@ cmdPut store = LockstepCmd
 
   , lsCmdRequire = \_ _ -> True
 
-  , lsCmdObserve = \() () -> pure ()
+  , lsCmdObserve = \() () -> label "Put"
   }
 
 cmdGet :: Store -> LockstepCmd (PropertyT IO) Model
@@ -105,7 +106,11 @@ cmdGet store = LockstepCmd
 
   , lsCmdRequire = \_ _ -> True
 
-  , lsCmdObserve = \expected actual -> expected === actual
+  , lsCmdObserve = \expected actual -> do
+      label "Get"
+      classify "Get hit"  (isJust expected)
+      classify "Get miss" (not (isJust expected))
+      expected === actual
   }
 
 cmdDelete :: Store -> LockstepCmd (PropertyT IO) Model
@@ -124,7 +129,7 @@ cmdDelete store = LockstepCmd
 
   , lsCmdRequire = \_ _ -> True
 
-  , lsCmdObserve = \() () -> pure ()
+  , lsCmdObserve = \() () -> label "Delete"
   }
 
 cmdSize :: Store -> LockstepCmd (PropertyT IO) Model
@@ -139,7 +144,9 @@ cmdSize store = LockstepCmd
 
   , lsCmdRequire = \_ _ -> True
 
-  , lsCmdObserve = \expected actual -> expected === actual
+  , lsCmdObserve = \expected actual -> do
+      label "Size"
+      expected === actual
   }
 
 -- ---------------------------------------------------------------------------

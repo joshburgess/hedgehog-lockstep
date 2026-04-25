@@ -144,6 +144,23 @@ Use the `*With` variants when commands need IO resources (e.g., `IORef`, databas
 
 Parallel operations must be thread-safe: use `atomicModifyIORef'`, `MVar`, or `TVar` rather than `modifyIORef'`.
 
+## Coverage labels
+
+`lsCmdObserve` runs in `Test ()`, so Hedgehog's `label`, `classify`, and `cover` work directly inside it. There's no separate tagging API.
+
+```haskell
+cmdGet store = LockstepCmd
+  { ...
+  , lsCmdObserve = \expected actual -> do
+      label "Get"
+      classify "Get hit"  (isJust expected)
+      classify "Get miss" (isNothing expected)
+      expected === actual
+  }
+```
+
+Hedgehog aggregates the labels across the run and prints them in the failure report (or always, if you use `cover`). See `test/Test/KVStore.hs` for a full example.
+
 ## Building
 
 Requires GHC 9.10.3:

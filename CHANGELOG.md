@@ -24,3 +24,5 @@ Initial release.
   `lockstepParallelWith`.
 - `lockstepCommands` for users who want to drive
   `Gen.sequential` / `executeSequential` directly.
+- README guidance and a `Test.KVStore` example for using
+  `Hedgehog.label` / `classify` inside `lsCmdObserve` for coverage labels.
