@@ -80,6 +80,34 @@ cmdGet ref = LockstepCmd
 
 -- ---------------------------------------------------------------------------
 -- Property: should FAIL because the model is buggy
+--
+-- Shrinking expectation (manual inspection only -- not asserted, see
+-- below for why):
+--
+-- A fresh run should shrink to a 1- or 2-action counterexample of the
+-- form @[Inc n]@ or @[Inc n, Get]@ where @n >= 2@. The bug is that the
+-- model increments by 1 regardless of @n@, so:
+--
+-- * @Inc 1@ does not surface the bug (model 0+1=1, real 0+1=1).
+-- * @Inc 2@ is the smallest @n@ where model (= 1) and real (= 2)
+--   diverge.
+--
+-- A counterexample like @[Inc 5, Inc 4, Get, Inc 3, ...]@ would mean
+-- shrinking is not running, which is a real regression. We do not
+-- assert that here because:
+--
+-- 1. Hedgehog's @check@ returns 'Bool', not the shrunk counterexample,
+--    so structured access requires @Hedgehog.Internal.Runner@ APIs we
+--    do not want to depend on.
+-- 2. Different shrinker versions can validly produce @Inc 2@ vs
+--    @Inc 3@; both are minimal in spirit.
+-- 3. Parsing the rendered failure box couples the test to Hedgehog's
+--    output format.
+--
+-- The assertion we /do/ make below is the meaningful one: the buggy
+-- model is detected at all. To eyeball the shrunk shape, run:
+--
+-- > cabal test --test-show-details=direct
 -- ---------------------------------------------------------------------------
 
 prop_buggyCounterDetected :: Property
