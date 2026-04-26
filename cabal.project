@@ -1,9 +1,5 @@
-with-compiler: ghc-9.10.3
 packages: .
 tests: True
-
-package hedgehog-lockstep
-  flags: +werror
 
 package text
   flags: -simdutf
