@@ -153,6 +153,11 @@ gvHead :: Var [Int] v -> GVar Int v
 gvHead var = mkGVar var (MyOpHead :: MyOp [Int] Int)
 ```
 
+`mkGVar` and `mapGVar` carry `Typeable` (and `Ord` on the real-side type)
+constraints inherited from the underlying `Var`; in the example above
+`[Int]` and `Int` satisfy them automatically. If you generalise the
+element type you'll need to propagate the same constraints.
+
 The library uses the `InterpretOp` instance to apply the projection during
 both model and real resolution; the `Show` instance feeds the `gvarLabel`
 chain shown in failure messages. See `test/Test/CustomOp.hs` for a full
@@ -190,7 +195,7 @@ lsCmdObserve = runObservation ObserveEq
 lsCmdObserve = runObservation (ObserveProject normaliseModel normaliseReal)
 
 -- Tuple of independent observations:
-lsCmdObserve = runObservation (ObservePair ObserveEq (ObserveProject id parseCount))
+lsCmdObserve = runObservation (ObservePair ObserveEq (ObserveProject id realToModel))
 
 -- Escape hatch (equivalent to writing it inline):
 lsCmdObserve = runObservation (ObserveCustom $ \m r -> ...)
@@ -352,7 +357,7 @@ If you have nothing extra to check, write `lsCmdInvariants = \_ _ -> pure ()`.
 
 ## Building
 
-Requires GHC 9.10.3:
+Tested with GHC 9.6, 9.8, 9.10, and 9.12 (see `tested-with` in the cabal file for exact versions):
 
 ```
 cabal build

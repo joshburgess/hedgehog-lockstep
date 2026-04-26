@@ -3,7 +3,8 @@
 This document has two parts. Sections 1 and 2 give the background: what
 `quickcheck-lockstep` is, how Hedgehog differs, and why a port is interesting.
 Sections 3 and 4 describe what `hedgehog-lockstep` actually ships today.
-Section 5 lists ideas that were explored but deliberately deferred.
+Section 5 walks through the design choices made along the way, including
+features that were considered, reshaped, or deliberately deferred.
 
 ## 1. What `quickcheck-lockstep` Is and How It Works
 
@@ -319,10 +320,11 @@ module Hedgehog.Lockstep
   ( -- Commands
     LockstepCmd (..)
   , toLockstepCommand
+  , hoistLockstepCmd
   , lockstepCommands
 
     -- State
-  , LockstepState (..)
+  , LockstepState
   , ModelEnv
   , initialLockstepState
   , getModel
@@ -333,20 +335,37 @@ module Hedgehog.Lockstep
   , GVar (..)
   , mkGVar
   , mkGVarId
+  , mapGVar
   , resolveGVar
   , concreteGVar
   , gvarLabel
 
     -- Structural projections
   , Op (..)
+  , InterpretOp (..)
   , applyOp
   , (>>>)
+
+    -- Structured observations
+  , Observation (..)
+  , runObservation
 
     -- Running tests
   , lockstepProperty
   , lockstepPropertyWith
   , lockstepParallel
   , lockstepParallelWith
+
+    -- Running tests in arbitrary monads
+  , lockstepPropertyM
+  , lockstepPropertyWithM
+  , lockstepParallelM
+  , lockstepParallelWithM
+
+    -- Coverage exploration
+  , lockstepLabelledExamples
+  , LabelledExamples
+  , ModelStep (..)
 
     -- Re-exports from Hedgehog and barbies
   , Var (..), Symbolic, Concrete
@@ -355,17 +374,20 @@ module Hedgehog.Lockstep
   )
 ```
 
-There is no `Observe` class, no `ModelResult` type family, and no
-`lockstepLabelledExamples`. Sections 1-2 describe the shape those would have
-taken; section 5 explains why they were deferred.
+There is no `Observe` class and no `ModelResult` type family. The model and
+real outputs are connected per-command through `lsCmdObserve`, with the
+`Observation` GADT (`ObserveEq` / `ObserveProject` / `ObservePair` /
+`ObserveCustom`) covering the structured cases that would have justified a
+class. Section 5.1 explains why the class-based design was set aside.
 
 ---
 
-## 5. Ideas Explored but Deferred
+## 5. Design Choices and Deferrals
 
-The items below were considered during design. Each was dropped or postponed
-because the simpler API already handles the common case, or because the
-feature needs real-world use to guide its shape.
+The items below were considered during design. Some shipped in a different
+shape than the original sketch; some were dropped or postponed because the
+simpler API already handles the common case, or because the feature needs
+real-world use to guide its shape.
 
 ### 5.1 `ModelResult` type family and `Observe` class
 
@@ -396,7 +418,7 @@ concrete ones. `hedgehog-lockstep` relies on the user's
 `usedVars` would encode. No separate API surface is needed, so this "feature"
 is really a property of the design rather than additional code.
 
-### 5.3 Tagging and labelled examples
+### 5.3 Tagging and labelled examples (shipped)
 
 The library ships three layers of coverage support:
 
