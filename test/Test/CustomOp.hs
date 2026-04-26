@@ -68,6 +68,27 @@ prop_customOpUnit = withTests 1 $ property $ do
       gvPair = mkGVar vPair (MyOfOp OpFst :: MyOp (Int, Int) Int)
   gvarLabel gvPair === "fst"
   concreteGVar gvPair === Just 4
+  -- mapGVar exercised with a custom op: chain a wrapped built-in
+  -- projection with the custom MyOpHead. Starting from
+  -- @Either err [Int]@: project Right to land on the [Int], then take
+  -- the list head.
+  let vEither :: Var (Either String [Int]) Concrete
+      vEither = Var (Concrete (Right [42, 43, 44]))
+      gvList :: GVar [Int] Concrete
+      gvList  = mkGVar vEither (MyOfOp OpRight :: MyOp (Either String [Int]) [Int])
+      gvHead :: GVar Int Concrete
+      gvHead  = mapGVar (MyOpHead :: MyOp [Int] Int) gvList
+  gvarLabel gvHead    === "right.head"
+  concreteGVar gvHead === Just 42
+  -- And the failure case: the same chain on a Left short-circuits to
+  -- Nothing (the wrapped OpRight projection fails before MyOpHead runs).
+  let vLeft :: Var (Either String [Int]) Concrete
+      vLeft = Var (Concrete (Left "boom"))
+      gvHeadFail :: GVar Int Concrete
+      gvHeadFail =
+        mapGVar (MyOpHead :: MyOp [Int] Int)
+                (mkGVar vLeft (MyOfOp OpRight :: MyOp (Either String [Int]) [Int]))
+  concreteGVar gvHeadFail === Nothing
 
 -- ---------------------------------------------------------------------------
 -- Integration test: a lockstep property using MyOpHead in a real command.
