@@ -366,7 +366,7 @@ cabal test
 
 ## Status
 
-This is a v0.1 implementation. See the [design document](docs/DESIGN.md) for the full rationale and comparison with quickcheck-lockstep.
+This is a v0.1 implementation.
 
 ### Known caveats
 
