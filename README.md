@@ -373,3 +373,7 @@ This is a v0.1 implementation.
 - **`Ord output` constraint**. `LockstepCmd` requires `Ord output` on command output types. This is needed for Var-identity-based model environment lookup. Most types satisfy this; truly opaque types (e.g., `IO.Handle`) would need a newtype wrapper that defines ordering (for example, by an allocation counter).
 
 - **Depends on `Hedgehog.Internal.State`**. The library imports a handful of types and constructors (`Var`, `Symbolic`, `Concrete`, `Name`, `Command`, `Callback`) from Hedgehog's internal module because the public surface doesn't expose enough to drive the state machine framework directly. Hedgehog's PVP guarantees don't cover internal modules, so a Hedgehog minor release could in principle break the build. The cabal file pins `hedgehog >=1.4 && <1.6` to limit exposure; bump the upper bound only after rebuilding against the new version.
+
+## License
+
+BSD 3-Clause. See [LICENSE](LICENSE).
