@@ -15,13 +15,16 @@ Initial release.
   interpretation and observation.
 - `LockstepState` wrapping a user-defined model plus a `ModelEnv`,
   a `Map` keyed by Hedgehog `Var` identity (O(log n) lookup) using a
-  phase-polymorphic `Ord1`-based comparison.
-- `GVar` and `Op` (`OpId`, `OpFst`, `OpSnd`, `OpLeft`, `OpRight`, `OpComp`)
-  for projecting values out of compound action outputs.
+  phase-polymorphic `Ord1`-based comparison. `initialLockstepState`,
+  `getModel`, and `getEntries` construct and project from it.
+- `GVar` and `Op` (`OpId`, `OpFst`, `OpSnd`, `OpLeft`, `OpRight`,
+  `OpComp`, plus `(>>>)` for left-to-right composition) for projecting
+  values out of compound action outputs.
 - `varsOfType`, `mkGVar`, `mkGVarId`, `mapGVar`, `resolveGVar`,
   `concreteGVar`, `gvarLabel` for enumerating and resolving generalized
-  variables. `mapGVar` composes an additional `Op` projection onto an
-  existing `GVar`, the analogue of `quickcheck-lockstep`'s `mapGVar`.
+  variables. `mapGVar` composes an additional projection (any
+  `InterpretOp` instance, including the built-in `Op`) onto an existing
+  `GVar`, the analogue of `quickcheck-lockstep`'s `mapGVar`.
 - Four test entry points:
   `lockstepProperty`, `lockstepPropertyWith`, `lockstepParallel`, and
   `lockstepParallelWith`.
@@ -49,6 +52,9 @@ Initial release.
   `QuickCheck`'s `labelledExamples` and `quickcheck-lockstep`'s
   `tagActions`: it answers "is the generator actually hitting the
   labelled cases I expect" without running the real system at all.
+  The accompanying `LabelledExamples` summary type and `ModelStep`
+  trace entry are exposed for callers that want to inspect the
+  sampled traces directly.
 - `lockstepCommands` for users who want to drive
   `Gen.sequential` / `executeSequential` directly.
 - README guidance and a `Test.KVStore` example for using
@@ -62,24 +68,25 @@ Initial release.
   reported via `Hedgehog.label`. This is the analogue of
   `quickcheck-lockstep`'s `tagStep` and is the natural place for tags
   whose value depends on how the model state changed during the step.
-- Per-step model-state footnote: `toLockstepCommand` now adds a
-  `footnote` of the post-step model after every command. Hedgehog only
-  displays footnotes on test failure, so passing tests are unaffected,
-  but a failure now shows the model-state evolution alongside the
-  shrunken command sequence (analogue of `quickcheck-lockstep`'s
-  `monitoring` counterexample enrichment).
+- Per-step model-state footnote: `toLockstepCommand` adds a `footnote`
+  of the post-step model after every command. Hedgehog only displays
+  footnotes on test failure, so passing tests are unaffected; on
+  failure the model-state evolution shows alongside the shrunken
+  command sequence (analogue of `quickcheck-lockstep`'s `monitoring`
+  counterexample enrichment).
 - Module-level Haddock for every public module, plus disambiguated
   identifier references so Haddock builds cleanly with no warnings.
 - README caveat documenting the dependency on `Hedgehog.Internal.State`.
 - `Test.UnitCoverage` exercising `applyOp`, `gvarLabel`, `mapGVar`, and
   `mkGVarId`.
 - `InterpretOp` class with `interpretOp :: op a b -> a -> Maybe b`.
-  `mkGVar` and `mapGVar` now accept any op type with `InterpretOp` and
+  `mkGVar` and `mapGVar` accept any op type with `InterpretOp` and
   `Show` instances, not just the built-in `Op`. Users can extend the
   projection vocabulary (e.g., a list-head op) by defining their own
-  GADT and supplying instances. The built-in `Op` is now an instance of
-  `InterpretOp`. `applyOp` is kept as a synonym for `interpretOp`. This
-  is the analogue of `quickcheck-lockstep`'s `Operation`/`InterpretOp`
-  classes, closing the structural-flexibility gap with that library.
+  GADT and supplying instances. The built-in `Op` is itself an
+  instance of `InterpretOp`, and `applyOp` is exported as a synonym
+  for `interpretOp`. This is the analogue of `quickcheck-lockstep`'s
+  `Operation`/`InterpretOp` classes, closing the structural-flexibility
+  gap with that library.
 - `Test.CustomOp` exercising a user-defined op (`MyOpHead :: MyOp [a] a`)
   end-to-end through a real lockstep test.
